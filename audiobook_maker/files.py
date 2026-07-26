@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from .common import CONVERTED_ORIGINALS_DIR, SOURCE_DIR, SUPPORTED_EXTENSIONS
+from .common import SUPPORTED_EXTENSIONS
 
 def unique_destination(directory: Path, source_name: str) -> Path:
     candidate = directory / source_name
@@ -19,13 +19,17 @@ def unique_destination(directory: Path, source_name: str) -> Path:
         number += 1
 
 
-def handle_successful_original(source_path: Path, action: Optional[str]) -> str:
+def handle_successful_original(
+    source_path: Path,
+    action: Optional[str],
+    converted_originals_dir: Path,
+) -> str:
     if action == "keep" or action is None:
         return "Original kept in Books to Convert."
 
     if action == "archive":
-        CONVERTED_ORIGINALS_DIR.mkdir(parents=True, exist_ok=True)
-        destination = unique_destination(CONVERTED_ORIGINALS_DIR, source_path.name)
+        converted_originals_dir.mkdir(parents=True, exist_ok=True)
+        destination = unique_destination(converted_originals_dir, source_path.name)
         shutil.move(str(source_path), str(destination))
         return f"Original moved to Converted Originals as: {destination.name}"
 
@@ -61,8 +65,13 @@ def handle_successful_original(source_path: Path, action: Optional[str]) -> str:
     return "Original kept in Books to Convert."
 
 
-def find_supported_sources() -> list[Path]:
-    return sorted(p for p in SOURCE_DIR.iterdir() if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS)
+def find_supported_sources(source_dir: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in source_dir.iterdir()
+        if path.is_file()
+        and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    )
 
 
 def unique_filename(base_name: str, used: set[str]) -> str:

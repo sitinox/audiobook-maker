@@ -18,30 +18,6 @@ def test_failed_conversion_does_not_handle_original(tmp_path, monkeypatch):
 
     source.write_text("Disposable test source.", encoding="utf-8")
 
-    folders = {
-
-        "SOURCE_DIR": source_dir,
-
-        "FINISHED_DIR": tmp_path / "Finished Audiobooks",
-
-        "CHAPTER_TEXT_DIR": tmp_path / "Chapter Text",
-
-        "EXTRACTED_TEXT_DIR": tmp_path / "Extracted Text",
-
-        "REPORTS_DIR": tmp_path / "Reports",
-
-        "SCRIPTS_DIR": tmp_path / "Scripts",
-
-        "BACKUPS_DIR": tmp_path / "Backups",
-
-        "CONVERTED_ORIGINALS_DIR": tmp_path / "Converted Originals",
-
-    }
-
-    for name, path in folders.items():
-
-        monkeypatch.setattr(cli, name, path)
-
     args = SimpleNamespace(
 
         force=False,
@@ -66,6 +42,8 @@ def test_failed_conversion_does_not_handle_original(tmp_path, monkeypatch):
 
         original_action="archive",
 
+        project_dir=tmp_path,
+
     )
 
     handled = []
@@ -82,7 +60,7 @@ def test_failed_conversion_does_not_handle_original(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "check_voice", lambda voice: voice)
 
-    monkeypatch.setattr(cli, "find_supported_sources", lambda: [source])
+    monkeypatch.setattr(cli, "find_supported_sources", lambda source_dir: [source])
 
     monkeypatch.setattr(
 
@@ -114,7 +92,11 @@ def test_failed_conversion_does_not_handle_original(tmp_path, monkeypatch):
 
         "handle_successful_original",
 
-        lambda path, action: handled.append((path, action)),
+        lambda path, action, converted_dir: handled.append(
+
+            (path, action)
+
+        ),
 
     )
 
@@ -156,30 +138,6 @@ def test_cancelled_conversion_does_not_handle_original(
 
     source.write_text("Disposable test source.", encoding="utf-8")
 
-    folders = {
-
-        "SOURCE_DIR": source_dir,
-
-        "FINISHED_DIR": tmp_path / "Finished Audiobooks",
-
-        "CHAPTER_TEXT_DIR": tmp_path / "Chapter Text",
-
-        "EXTRACTED_TEXT_DIR": tmp_path / "Extracted Text",
-
-        "REPORTS_DIR": tmp_path / "Reports",
-
-        "SCRIPTS_DIR": tmp_path / "Scripts",
-
-        "BACKUPS_DIR": tmp_path / "Backups",
-
-        "CONVERTED_ORIGINALS_DIR": tmp_path / "Converted Originals",
-
-    }
-
-    for name, path in folders.items():
-
-        monkeypatch.setattr(cli, name, path)
-
     args = SimpleNamespace(
 
         force=False,
@@ -204,6 +162,8 @@ def test_cancelled_conversion_does_not_handle_original(
 
         original_action=original_action,
 
+        project_dir=tmp_path,
+
     )
 
     handled = []
@@ -222,7 +182,7 @@ def test_cancelled_conversion_does_not_handle_original(
 
     monkeypatch.setattr(cli, "check_voice", lambda voice: voice)
 
-    monkeypatch.setattr(cli, "find_supported_sources", lambda: [source])
+    monkeypatch.setattr(cli, "find_supported_sources", lambda source_dir: [source])
 
     monkeypatch.setattr(
 
@@ -250,7 +210,11 @@ def test_cancelled_conversion_does_not_handle_original(
 
         "handle_successful_original",
 
-        lambda path, action: handled.append((path, action)),
+        lambda path, action, converted_dir: handled.append(
+
+            (path, action)
+
+        ),
 
     )
 

@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from .common import (
-    CHAPTER_TEXT_DIR, EXTRACTED_TEXT_DIR, FINISHED_DIR, REPORTS_DIR,
-    Settings, VERSION, say,
+    ProjectPaths, Settings, VERSION, say,
 )
 from .settings import ask, choose_author, choose_title, output_format_description
 from .text_utils import (
@@ -148,13 +147,19 @@ def process_source(
 
     force: bool,
 
+    paths: ProjectPaths,
+
 ) -> ConversionOutcome:
 
     raw_guess_title = pretty_title_from_filename(source_path)
 
     safe_guess = safe_filename(raw_guess_title)
 
-    extracted = extract_source_text(source_path, safe_guess)
+    extracted = extract_source_text(
+        source_path,
+        safe_guess,
+        paths.extracted_text_dir,
+    )
 
     extracted_for_guess = extracted.text
 
@@ -194,7 +199,7 @@ def process_source(
 
         (
 
-            EXTRACTED_TEXT_DIR / f"{book_title}.txt"
+            paths.extracted_text_dir / f"{book_title}.txt"
 
         ).write_text(
 
@@ -340,9 +345,9 @@ def process_source(
 
     output_format = settings.output_format or "mp3"
 
-    book_finished_dir = FINISHED_DIR / book_title
+    book_finished_dir = paths.finished_dir / book_title
 
-    book_chapter_text_dir = CHAPTER_TEXT_DIR / book_title
+    book_chapter_text_dir = paths.chapter_text_dir / book_title
 
     mp3_output_dir, m4b_output_dir = _output_directories(
 
@@ -378,7 +383,7 @@ def process_source(
 
     )
 
-    REPORTS_DIR.mkdir(
+    paths.reports_dir.mkdir(
 
         parents=True,
 
@@ -388,7 +393,7 @@ def process_source(
 
     report_path = (
 
-        REPORTS_DIR / f"{book_title} report.txt"
+        paths.reports_dir / f"{book_title} report.txt"
 
     )
 

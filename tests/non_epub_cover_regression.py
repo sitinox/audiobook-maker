@@ -35,7 +35,11 @@ extract_source_text = find_extractor()
 
 def extract(path: Path, title: str) -> Any:
     last_error: Optional[Exception] = None
-    for args in ((path, title), (str(path), title), (path,), (str(path),)):
+    extracted_dir = path.parent / "Extracted Text"
+    for args in (
+        (path, title, extracted_dir),
+        (str(path), title, extracted_dir),
+    ):
         try:
             return extract_source_text(*args)
         except TypeError as exc:

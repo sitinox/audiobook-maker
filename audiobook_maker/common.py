@@ -45,16 +45,43 @@ DEFAULT_BITRATE = 192
 SAMPLE_RATE = 44100
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".docx", ".epub"}
 
-PROJECT_DIR = Path.home() / "Library" / "Mobile Documents" / "com~apple~CloudDocs" / "Audiobook Maker"
-SOURCE_DIR = PROJECT_DIR / "Books to Convert"
-FINISHED_DIR = PROJECT_DIR / "Finished MP3 Audiobooks"
-CHAPTER_TEXT_DIR = PROJECT_DIR / "Chapter Text Files"
-EXTRACTED_TEXT_DIR = PROJECT_DIR / "Extracted Full Text"
-REPORTS_DIR = PROJECT_DIR / "Reports"
-SCRIPTS_DIR = PROJECT_DIR / "Scripts"
-BACKUPS_DIR = SCRIPTS_DIR / "Backups"
-CONVERTED_ORIGINALS_DIR = PROJECT_DIR / "Converted Originals"
-SETTINGS_PATH = PROJECT_DIR / "settings.json"
+APPLICATION_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "Audiobook Maker"
+SETTINGS_PATH = APPLICATION_SUPPORT_DIR / "settings.json"
+
+
+@dataclass(frozen=True)
+class ProjectPaths:
+    project_dir: Path
+    source_dir: Path
+    finished_dir: Path
+    chapter_text_dir: Path
+    extracted_text_dir: Path
+    reports_dir: Path
+    converted_originals_dir: Path
+
+    @classmethod
+    def from_project_dir(cls, project_dir: Path) -> "ProjectPaths":
+        project_dir = project_dir.expanduser()
+        return cls(
+            project_dir=project_dir,
+            source_dir=project_dir / "Books to Convert",
+            finished_dir=project_dir / "Finished MP3 Audiobooks",
+            chapter_text_dir=project_dir / "Chapter Text Files",
+            extracted_text_dir=project_dir / "Extracted Full Text",
+            reports_dir=project_dir / "Reports",
+            converted_originals_dir=project_dir / "Converted Originals",
+        )
+
+    def required_directories(self) -> tuple[Path, ...]:
+        return (
+            self.project_dir,
+            self.source_dir,
+            self.finished_dir,
+            self.chapter_text_dir,
+            self.extracted_text_dir,
+            self.reports_dir,
+            self.converted_originals_dir,
+        )
 
 CHANGELOG_TEXT = """Audiobook Maker changelog
 
@@ -251,6 +278,8 @@ class Settings:
     output_format: Optional[str] = None
 
     original_action: Optional[str] = None
+
+    project_dir: Optional[Path] = None
 
 
 
