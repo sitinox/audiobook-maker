@@ -1,5 +1,6 @@
 import argparse
 from importlib.resources import files
+from pathlib import Path
 
 from .audio import ID3
 from .common import (
@@ -9,6 +10,7 @@ from .common import (
     SUPPORTED_EXTENSIONS,
     VERSION,
     BeautifulSoup,
+    ConversionOptions,
     ProjectPaths,
     Settings,
     check_tool,
@@ -24,6 +26,7 @@ from .settings import (
     choose_book_original_action,
     choose_run_original_action,
     confirm_settings,
+    get_installed_voices,
     load_settings,
     original_action_description,
     output_format_description,
@@ -47,6 +50,49 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=f"Audiobook Maker {VERSION}. Convert PDF, TXT, DOCX, and EPUB sources into chapterised MP3, M4B, or combined audiobooks.",
         epilog="Put source files in the 'Books to Convert' folder. Supported files: .pdf, .txt, .docx, and .epub. Audiobook Maker suggests title and author, reviews front matter, creates MP3 or M4B output, embeds chapters, metadata and cover art when available, verifies durations, and saves reports.",
+    )
+    source_group = parser.add_mutually_exclusive_group()
+    source_group.add_argument(
+        "--source",
+        type=Path,
+        metavar="FILE",
+        help="Process one explicit PDF, TXT, DOCX, or EPUB source file.",
+    )
+    source_group.add_argument(
+        "--all",
+        dest="process_all",
+        action="store_true",
+        help="Process every supported source in the Books to Convert folder.",
+    )
+    parser.add_argument(
+        "--non-interactive",
+        "--yes",
+        dest="non_interactive",
+        action="store_true",
+        help="Run without prompts, using command-line choices, saved settings, and defaults.",
+    )
+    parser.add_argument("--title", help="Override the detected title. Only valid with --source.")
+    parser.add_argument("--author", help="Override the detected author for this run.")
+    parser.add_argument(
+        "--front-matter",
+        choices=["keep", "skip"],
+        help="In non-interactive mode, keep or skip all detected front matter.",
+    )
+    parser.add_argument(
+        "--output",
+        choices=["mp3", "m4b", "both"],
+        help="Override the saved output format for this run.",
+    )
+    parser.add_argument(
+        "--original",
+        choices=["keep", "archive", "trash"],
+        help="Choose what happens to successfully converted source files.",
+    )
+    parser.add_argument(
+        "--project-dir",
+        type=Path,
+        metavar="FOLDER",
+        help="Use this project folder for the current run.",
     )
     parser.add_argument(
         "--force", action="store_true", help="Remake MP3 files even if they already exist."
@@ -75,7 +121,37 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--version", action="store_true", help="Show the script version, then exit."
     )
-    return parser.parse_args()
+
+    args = parser.parse_args()
+
+    if args.title and args.source is None:
+        parser.error("--title requires --source.")
+
+    automation_choices = [
+        args.source,
+        args.process_all,
+        args.title,
+        args.author,
+        args.front_matter,
+        args.output,
+        args.original,
+        args.project_dir,
+    ]
+    if any(value is not None and value is not False for value in automation_choices):
+        args.non_interactive = True
+
+    return args
+
+
+def conversion_options_from_args(args: argparse.Namespace) -> ConversionOptions:
+    return ConversionOptions(
+        non_interactive=getattr(args, "non_interactive", False),
+        source=getattr(args, "source", None),
+        process_all=getattr(args, "process_all", False),
+        title=getattr(args, "title", None),
+        author=getattr(args, "author", None),
+        front_matter=getattr(args, "front_matter", None),
+    )
 
 
 def show_settings(settings: Settings, paths: ProjectPaths) -> None:
@@ -122,8 +198,101 @@ def show_changelog() -> None:
     say(changelog.strip())
 
 
+def _apply_cli_settings(
+    settings: Settings,
+    args: argparse.Namespace,
+) -> Settings:
+
+    voice = getattr(args, "voice", None)
+
+    rate = getattr(args, "rate", None)
+
+    bitrate = getattr(args, "bitrate", None)
+
+    output = getattr(args, "output", None)
+
+    original = getattr(args, "original", None)
+
+    project_dir = getattr(args, "project_dir", None)
+
+    if voice:
+        settings.voice = voice
+
+    if rate is not None:
+        settings.rate = rate
+
+    if bitrate:
+        settings.bitrate = bitrate
+
+    if output:
+        settings.output_format = output
+
+    if original:
+        settings.original_action = original
+
+    if project_dir:
+        settings.project_dir = project_dir.expanduser()
+
+    return settings
+
+
+def _resolve_sources(
+    args: argparse.Namespace,
+    paths: ProjectPaths,
+) -> list[Path]:
+
+    explicit_source = getattr(args, "source", None)
+
+    if explicit_source is not None:
+        source = explicit_source.expanduser()
+
+        if not source.exists():
+            raise RuntimeError(f"Source file was not found: {source}")
+
+        if not source.is_file():
+            raise RuntimeError(f"Source path is not a file: {source}")
+
+        if source.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            raise RuntimeError("Unsupported source type. Supported files: PDF, TXT, DOCX, EPUB.")
+        return [source]
+
+    return find_supported_sources(paths.source_dir)
+
+
+def _validate_non_interactive_settings(
+    settings: Settings,
+) -> None:
+    missing = []
+
+    if settings.project_dir is None:
+        missing.append("--project-dir or a saved project folder")
+
+    if settings.output_format not in {"mp3", "m4b", "both"}:
+        missing.append("--output or a saved output format")
+
+    if settings.original_action not in {"keep", "archive", "trash"}:
+        missing.append("--original or a saved original-file action")
+
+    if missing:
+        raise RuntimeError("Non-interactive mode needs " + ", ".join(missing) + ".")
+
+
+def _check_voice_non_interactively(voice: str) -> str:
+    available = get_installed_voices()
+
+    if voice not in available:
+        raise RuntimeError(
+            f'The voice "{voice}" is not installed on this Mac. '
+            "Choose an installed voice with --voice."
+        )
+
+    return voice
+
+
 def main() -> int:
     args = parse_args()
+    options = conversion_options_from_args(args)
+
     say(f"Audiobook Maker {VERSION}")
     say("==========================")
 
@@ -135,16 +304,11 @@ def main() -> int:
         show_changelog()
         return 0
 
-    settings = load_settings()
-    if args.voice:
-        settings.voice = args.voice
-    if args.rate is not None:
-        settings.rate = args.rate
-    if args.bitrate:
-        settings.bitrate = args.bitrate
-    save_settings(settings)
+    settings = _apply_cli_settings(load_settings(), args)
 
-    if settings.project_dir is None:
+    if options.non_interactive:
+        _validate_non_interactive_settings(settings)
+    elif settings.project_dir is None:
         settings = confirm_settings(settings)
 
     if settings.project_dir is None:
@@ -162,50 +326,69 @@ def main() -> int:
     check_tool("say")
     check_tool("ffmpeg")
     check_tool("ffprobe")
-    settings.voice = check_voice(settings.voice)
+
+    if options.non_interactive:
+        settings.voice = _check_voice_non_interactively(settings.voice)
+    else:
+        settings.voice = check_voice(settings.voice)
+
     save_settings(settings)
+
+    if not options.non_interactive:
+        settings = confirm_settings(settings)
+
+        if settings.project_dir is None:
+            raise RuntimeError("Project folder was not configured.")
+
+        paths = ProjectPaths.from_project_dir(settings.project_dir)
+
+        for folder in paths.required_directories():
+            folder.mkdir(parents=True, exist_ok=True)
+
     if ID3 is None:
         raise RuntimeError(
-            "Missing required Python package: mutagen. Install it with: python3 -m pip install mutagen"
+            "Missing required Python package: mutagen. "
+            "Install it with: python3 -m pip install mutagen"
         )
 
-    settings = confirm_settings(settings)
+    sources = _resolve_sources(args, paths)
 
-    if settings.project_dir is None:
-        raise RuntimeError("Project folder was not configured.")
-
-    paths = ProjectPaths.from_project_dir(settings.project_dir)
-
-    for folder in paths.required_directories():
-        folder.mkdir(parents=True, exist_ok=True)
-
-    sources = find_supported_sources(paths.source_dir)
     if not sources:
         say(f"No supported files found in: {paths.source_dir}")
         say("Supported files: PDF, TXT, DOCX, EPUB.")
         return 0
 
-    if any(p.suffix.lower() == ".pdf" for p in sources):
+    if any(path.suffix.lower() == ".pdf" for path in sources):
         check_tool("pdftotext")
-    if any(p.suffix.lower() == ".docx" for p in sources) and docx is None:
+
+    if any(path.suffix.lower() == ".docx" for path in sources) and docx is None:
         raise RuntimeError(
             "DOCX support needs python-docx. Install it with: python3 -m pip install python-docx"
         )
-    if any(p.suffix.lower() == ".epub" for p in sources):
+
+    if any(path.suffix.lower() == ".epub" for path in sources):
         if ebook_epub is None or BeautifulSoup is None:
             raise RuntimeError(
-                "EPUB support needs ebooklib and beautifulsoup4. Install them with: python3 -m pip install ebooklib beautifulsoup4"
+                "EPUB support needs ebooklib and beautifulsoup4. "
+                "Install them with: python3 -m pip install ebooklib beautifulsoup4"
             )
 
     counts = {
-        ext: sum(1 for p in sources if p.suffix.lower() == ext) for ext in SUPPORTED_EXTENSIONS
+        extension: sum(1 for path in sources if path.suffix.lower() == extension)
+        for extension in SUPPORTED_EXTENSIONS
     }
     say(f"Found {len(sources)} source file(s).")
     say(
-        f"PDF: {counts.get('.pdf', 0)}, TXT: {counts.get('.txt', 0)}, DOCX: {counts.get('.docx', 0)}, EPUB: {counts.get('.epub', 0)}"
+        f"PDF: {counts.get('.pdf', 0)}, "
+        f"TXT: {counts.get('.txt', 0)}, "
+        f"DOCX: {counts.get('.docx', 0)}, "
+        f"EPUB: {counts.get('.epub', 0)}"
     )
 
-    run_original_action = choose_run_original_action(settings.original_action or "archive")
+    if options.non_interactive:
+        run_original_action = settings.original_action or "archive"
+    else:
+        run_original_action = choose_run_original_action(settings.original_action or "archive")
 
     run_authors: list[str] = []
     completed = 0
@@ -214,6 +397,7 @@ def main() -> int:
     for index, source in enumerate(sources, start=1):
         say("")
         say(f"Source {index} of {len(sources)}")
+
         try:
             outcome = process_source(
                 source,
@@ -221,16 +405,23 @@ def main() -> int:
                 run_authors,
                 args.force,
                 paths,
+                options,
             )
+
             if outcome is ConversionOutcome.COMPLETED:
                 action = run_original_action
-                if run_original_action == "ask":
+
+                if not options.non_interactive and run_original_action == "ask":
                     action, apply_to_remaining = choose_book_original_action(source.name)
+
                     if apply_to_remaining:
                         run_original_action = action
                         say(
-                            f"This choice will also apply to all remaining successful books in this run: {original_action_description(action)}"
+                            "This choice will also apply to all remaining "
+                            "successful books in this run: "
+                            f"{original_action_description(action)}"
                         )
+
                 original_result = handle_successful_original(
                     source,
                     action,
@@ -250,4 +441,5 @@ def main() -> int:
     say(f"Books failed: {failed}")
     say(f"Finished audiobooks are in: {paths.finished_dir}")
     notify_run_complete(completed, failed, settings.voice)
+
     return 1 if failed else 0
