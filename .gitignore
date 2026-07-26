@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local Audiobook Maker data
+settings.json
+Books to Convert/
+Finished MP3 Audiobooks/
+Finished Audiobooks/
+Converted Originals/
+Chapter Text Files/
+Extracted Full Text/
+Reports/
+Backups/
+
+# Generated audio and temporary media
+*.mp3
+*.m4b
+*.m4a
+*.aac
+*.wav
+*.aiff
+*.tmp
+*.temp
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Editors
+.vscode/
+.idea/

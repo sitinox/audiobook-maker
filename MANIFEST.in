@@ -1,0 +1,19 @@
+
+include LICENSE
+
+include README.md
+
+include CHANGELOG.md
+
+include RELEASE_NOTES_v5.0.0.md
+
+include RELEASE_NOTES_v5.1.0.md
+
+include make_audiobooks.py
+
+recursive-include tests *.py
+
+global-exclude __pycache__
+
+global-exclude *.py[cod]
+

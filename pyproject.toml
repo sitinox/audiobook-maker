@@ -1,0 +1,60 @@
+
+[build-system]
+
+requires = ["setuptools>=69"]
+
+build-backend = "setuptools.build_meta"
+
+[project]
+
+name = "audiobook-maker"
+
+version = "5.1.0"
+
+description = "An accessible macOS command-line tool for converting PDF, TXT, DOCX, and EPUB books into MP3 and M4B audiobooks."
+
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+
+requires-python = ">=3.9"
+classifiers = [
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+
+    "beautifulsoup4>=4.12",
+
+    "EbookLib>=0.18",
+
+    "mutagen>=1.47",
+
+    "python-docx>=1.1",
+
+]
+
+[project.scripts]
+
+audiobook = "audiobook_maker.cli:main"
+
+[tool.setuptools]
+
+packages = ["audiobook_maker"]
+
+
+[project.optional-dependencies]
+
+dev = [
+
+    "pytest>=8.0",
+
+]
+
+[tool.pytest.ini_options]
+
+testpaths = ["tests"]
+
+python_files = ["test_*.py"]
+
