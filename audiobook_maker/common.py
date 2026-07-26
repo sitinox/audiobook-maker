@@ -1,23 +1,11 @@
 #!/usr/bin/env python3
 
-from pathlib import Path
-from dataclasses import dataclass, field
-from datetime import datetime
-import argparse
-import json
 import re
 import shutil
 import subprocess
-import sys
-import tempfile
-from typing import Optional, Any
-
-try:
-    from mutagen.id3 import ID3, TIT2, TALB, TPE1, TPE2, TRCK, TCON, COMM, TDRC, APIC
-    from mutagen.mp3 import MP3
-except ImportError:
-    ID3 = None
-    MP3 = None
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
 
 try:
     import docx
@@ -25,7 +13,8 @@ except ImportError:
     docx = None
 
 try:
-    from ebooklib import epub as ebook_epub, ITEM_DOCUMENT, ITEM_IMAGE
+    from ebooklib import ITEM_DOCUMENT, ITEM_IMAGE
+    from ebooklib import epub as ebook_epub
 except ImportError:
     ebook_epub = None
     ITEM_DOCUMENT = None
@@ -84,6 +73,7 @@ class ProjectPaths:
             self.reports_dir,
             self.converted_originals_dir,
         )
+
 
 DIVIDER_PATTERN = re.compile(r"(?m)^\s*(?:[*~_\-=]\s*){3,}\s*$")
 PAGE_NUMBER_PATTERN = re.compile(r"(?m)^\s*\d+\s*$")
@@ -172,12 +162,13 @@ LIKELY_REMOVE_RE = re.compile(
     re.I,
 )
 
-LIKELY_KEEP_RE = re.compile(r"dedication|prologue|foreword|author'?s note|notes?|acknowledgements?", re.I)
+LIKELY_KEEP_RE = re.compile(
+    r"dedication|prologue|foreword|author'?s note|notes?|acknowledgements?", re.I
+)
+
 
 @dataclass
-
 class Settings:
-
     voice: str = DEFAULT_VOICE
 
     rate: int = DEFAULT_RATE
@@ -191,13 +182,13 @@ class Settings:
     project_dir: Optional[Path] = None
 
 
-
 @dataclass
 class Section:
     heading: str
     text: str
     kind: str = "main"
     kept: bool = True
+
 
 @dataclass
 class SourceBook:
@@ -207,6 +198,7 @@ class SourceBook:
     text: str
     source_type: str
     warnings: list[str] = field(default_factory=list)
+
 
 @dataclass
 class ExtractedSource:
@@ -245,5 +237,3 @@ def check_tool(tool_name: str) -> None:
     }
     hint = install_hints.get(tool_name, f"Install '{tool_name}' and make sure it is on your PATH.")
     raise RuntimeError(f"Missing required tool: {tool_name}. {hint}")
-
-

@@ -6,9 +6,17 @@ from pathlib import Path
 from typing import Optional
 
 from .common import (
-    DEFAULT_BITRATE, DEFAULT_RATE, DEFAULT_VOICE, MAX_SPEECH_RATE,
-    MIN_SPEECH_RATE, SAMPLE_RATE, SETTINGS_PATH, Settings, say,
+    DEFAULT_BITRATE,
+    DEFAULT_RATE,
+    DEFAULT_VOICE,
+    MAX_SPEECH_RATE,
+    MIN_SPEECH_RATE,
+    SAMPLE_RATE,
+    SETTINGS_PATH,
+    Settings,
+    say,
 )
+
 
 def get_installed_voices() -> list[str]:
     result = subprocess.run(["say", "-v", "?"], text=True, capture_output=True)
@@ -48,9 +56,7 @@ def choose_installed_voice(current_voice: Optional[str] = None) -> str:
         for number, voice in enumerate(voices, start=1):
             say(f"{number}. {voice}")
 
-        choice = ask(
-            "Type the number of the voice you want, or type r to repeat the list."
-        ).lower()
+        choice = ask("Type the number of the voice you want, or type r to repeat the list.").lower()
 
         if choice == "r":
             continue
@@ -69,14 +75,10 @@ def check_voice(voice: str) -> str:
     return choose_installed_voice(voice)
 
 
-
-
 def _valid_rate(value: object) -> int:
     rate = int(value)
     if not MIN_SPEECH_RATE <= rate <= MAX_SPEECH_RATE:
-        raise ValueError(
-            f"Speech rate must be between {MIN_SPEECH_RATE} and {MAX_SPEECH_RATE}."
-        )
+        raise ValueError(f"Speech rate must be between {MIN_SPEECH_RATE} and {MAX_SPEECH_RATE}.")
     return rate
 
 
@@ -85,9 +87,7 @@ def _corrupt_settings_backup_path() -> Path:
     candidate = SETTINGS_PATH.with_name(f"{SETTINGS_PATH.name}.corrupt-{timestamp}")
     counter = 2
     while candidate.exists():
-        candidate = SETTINGS_PATH.with_name(
-            f"{SETTINGS_PATH.name}.corrupt-{timestamp}-{counter}"
-        )
+        candidate = SETTINGS_PATH.with_name(f"{SETTINGS_PATH.name}.corrupt-{timestamp}-{counter}")
         counter += 1
     return candidate
 
@@ -113,8 +113,7 @@ def load_settings() -> Settings:
         project_dir_value = data.get("project_dir")
         project_dir = (
             Path(project_dir_value).expanduser()
-            if isinstance(project_dir_value, str)
-            and project_dir_value.strip()
+            if isinstance(project_dir_value, str) and project_dir_value.strip()
             else None
         )
 
@@ -144,21 +143,22 @@ def load_settings() -> Settings:
 
 def save_settings(settings: Settings) -> None:
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(
-        {
-            "voice": settings.voice,
-            "rate": _valid_rate(settings.rate),
-            "bitrate": settings.bitrate,
-            "output_format": settings.output_format,
-            "original_action": settings.original_action,
-            "project_dir": (
-                str(settings.project_dir)
-                if settings.project_dir is not None
-                else None
-            ),
-        },
-        indent=2,
-    ) + "\n"
+    payload = (
+        json.dumps(
+            {
+                "voice": settings.voice,
+                "rate": _valid_rate(settings.rate),
+                "bitrate": settings.bitrate,
+                "output_format": settings.output_format,
+                "original_action": settings.original_action,
+                "project_dir": (
+                    str(settings.project_dir) if settings.project_dir is not None else None
+                ),
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
     temporary_path: Optional[Path] = None
     try:
@@ -262,7 +262,11 @@ def choose_run_original_action(default_action: str) -> str:
             "What should happen to original books after successful conversion during this run?",
             [
                 ("1", "Keep every successful original in Books to Convert for this run.", "keep"),
-                ("2", "Move every successful original to Converted Originals for this run.", "archive"),
+                (
+                    "2",
+                    "Move every successful original to Converted Originals for this run.",
+                    "archive",
+                ),
                 ("3", "Move every successful original to the Bin for this run.", "trash"),
                 ("4", "Ask me after each successful book.", "ask"),
             ],
@@ -284,8 +288,16 @@ def choose_book_original_action(book_name: str) -> tuple[str, bool]:
             ("1", "Keep this original in Books to Convert.", ("keep", False)),
             ("2", "Move this original to Converted Originals.", ("archive", False)),
             ("3", "Move this original to the Bin.", ("trash", False)),
-            ("4", "Keep this and all remaining successful originals in Books to Convert.", ("keep", True)),
-            ("5", "Move this and all remaining successful originals to Converted Originals.", ("archive", True)),
+            (
+                "4",
+                "Keep this and all remaining successful originals in Books to Convert.",
+                ("keep", True),
+            ),
+            (
+                "5",
+                "Move this and all remaining successful originals to Converted Originals.",
+                ("archive", True),
+            ),
             ("6", "Move this and all remaining successful originals to the Bin.", ("trash", True)),
         ],
         "Type 1, 2, 3, 4, 5, or 6, or type r to repeat the choices.",
@@ -299,8 +311,6 @@ def choose_book_original_action(book_name: str) -> tuple[str, bool]:
 def ask(prompt: str) -> str:
     say(prompt)
     return input().strip()
-
-
 
 
 def choose_project_dir(current_dir: Optional[Path] = None) -> Path:
@@ -324,9 +334,7 @@ def choose_project_dir(current_dir: Optional[Path] = None) -> Path:
 def confirm_settings(settings: Settings) -> Settings:
 
     while True:
-
         if settings.project_dir is None:
-
             settings.project_dir = choose_project_dir()
 
             save_settings(settings)
@@ -340,47 +348,27 @@ def confirm_settings(settings: Settings) -> Settings:
         say(f"Audio: {SAMPLE_RATE / 1000:.1f} kHz, {settings.bitrate} kbps")
 
         if settings.output_format is None:
-
             settings.output_format = choose_output_format()
 
             save_settings(settings)
 
-        say(
-
-            f"Output format: "
-
-            f"{output_format_description(settings.output_format)}"
-
-        )
+        say(f"Output format: {output_format_description(settings.output_format)}")
 
         if settings.original_action is None:
-
             settings.original_action = choose_original_action()
 
             save_settings(settings)
 
-        say(
+        say(f"After successful conversion: {original_action_description(settings.original_action)}")
 
-            f"After successful conversion: "
-
-            f"{original_action_description(settings.original_action)}"
-
-        )
-
-        choice = ask(
-
-            "Press Enter to use these settings, or type change."
-
-        ).lower()
+        choice = ask("Press Enter to use these settings, or type change.").lower()
 
         if choice == "":
-
             save_settings(settings)
 
             return settings
 
         if choice in {"change", "c"}:
-
             settings = change_settings(settings)
 
             save_settings(settings)
@@ -390,146 +378,106 @@ def confirm_settings(settings: Settings) -> Settings:
         say("Please press Enter or type change.")
 
 
-
 def change_settings(settings: Settings) -> Settings:
 
     say(f"Project folder is currently {settings.project_dir}.")
 
-    project_choice = ask(
-        "Press Enter to keep it, or type change to choose another folder."
-    ).lower()
+    project_choice = ask("Press Enter to keep it, or type change to choose another folder.").lower()
 
     if project_choice in {"change", "c"}:
-
         settings.project_dir = choose_project_dir(settings.project_dir)
 
     elif project_choice:
-
         say("Project folder unchanged. Type change to choose another folder.")
 
     say(f"Voice is currently {settings.voice}.")
 
     voice_choice = ask(
-
         "Press Enter to keep it, or type change to choose another installed voice."
-
     ).lower()
 
     if voice_choice in {"change", "c"}:
-
         settings.voice = choose_installed_voice()
 
     elif voice_choice:
-
         say("Voice unchanged. Type change to choose from the installed voices.")
 
     while True:
-
         rate_choice = ask(
-
             f"Speech rate is currently {settings.rate}. Press Enter to keep it, or type a new number."
-
         )
 
         if not rate_choice:
-
             break
 
         try:
-
             settings.rate = _valid_rate(rate_choice)
 
             break
 
         except (ValueError, TypeError):
-
             say(f"Please type a number from {MIN_SPEECH_RATE} to {MAX_SPEECH_RATE}.")
 
     while True:
-
         say("Bitrate choices: 128 smaller, 192 recommended, 256 higher, 320 maximum.")
 
         bitrate_choice = ask(
-
             f"Bitrate is currently {settings.bitrate}. Press Enter to keep it, or type 128, 192, 256, or 320."
-
         )
 
         if not bitrate_choice:
-
             break
 
         try:
-
             bitrate = int(bitrate_choice)
 
             if bitrate in {128, 192, 256, 320}:
-
                 settings.bitrate = bitrate
 
                 break
 
         except ValueError:
-
             pass
 
         say("Please choose 128, 192, 256, or 320.")
 
     while True:
-
-        say(
-
-            f"Output format is currently: "
-
-            f"{output_format_description(settings.output_format)}."
-
-        )
+        say(f"Output format is currently: {output_format_description(settings.output_format)}.")
 
         output_choice = ask(
-
             "Press Enter to keep it, type change to choose another output format, or type r to repeat."
-
         ).lower()
 
         if output_choice == "":
-
             break
 
         if output_choice in {"change", "c"}:
-
             settings.output_format = choose_output_format()
 
             break
 
         if output_choice == "r":
-
             continue
 
         say("Please press Enter, type change, or type r.")
 
     say(
-
         f"Original-file action is currently: "
-
         f"{original_action_description(settings.original_action)}."
-
     )
 
     original_choice = ask(
-
         "Press Enter to keep it, or type change to choose what happens after successful conversion."
-
     ).lower()
 
     if original_choice in {"change", "c"}:
-
         settings.original_action = choose_original_action()
 
     elif original_choice:
-
         say("Original-file action unchanged. Type change to choose another option.")
 
     return settings
+
 
 def choose_title(source_path: Path, suggested_title: str) -> str:
     while True:
@@ -542,11 +490,15 @@ def choose_title(source_path: Path, suggested_title: str) -> str:
         return answer
 
 
-def choose_author(source_path: Path, suggested_author: Optional[str], run_authors: list[str]) -> str:
+def choose_author(
+    source_path: Path, suggested_author: Optional[str], run_authors: list[str]
+) -> str:
     while True:
         if suggested_author:
             say(f"Suggested author: {suggested_author}")
-            answer = ask("Press Enter to accept, type r to repeat, type list to choose a previous author, or type a different author.")
+            answer = ask(
+                "Press Enter to accept, type r to repeat, type list to choose a previous author, or type a different author."
+            )
             if answer == "":
                 author = suggested_author
                 break
@@ -563,7 +515,9 @@ def choose_author(source_path: Path, suggested_author: Optional[str], run_author
             say("Authors used in this run:")
             for index, author_name in enumerate(run_authors, start=1):
                 say(f"{index}. {author_name}")
-            answer = ask("Type a number to choose an author, type r to repeat this list, or type a new author.")
+            answer = ask(
+                "Type a number to choose an author, type r to repeat this list, or type a new author."
+            )
             if answer.lower() == "r":
                 continue
             if answer.isdigit() and 1 <= int(answer) <= len(run_authors):
@@ -585,5 +539,3 @@ def choose_author(source_path: Path, suggested_author: Optional[str], run_author
         run_authors.remove(author)
     run_authors.append(author)
     return author
-
-

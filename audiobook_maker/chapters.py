@@ -2,27 +2,29 @@ import re
 from typing import Optional
 
 from .common import (
-    BARE_MAIN_START_PATTERN, FRONT_LABEL_PATTERN, LIKELY_KEEP_RE,
-    LIKELY_REMOVE_RE, MAIN_HEADING_PATTERN, Section, say,
+    BARE_MAIN_START_PATTERN,
+    FRONT_LABEL_PATTERN,
+    LIKELY_KEEP_RE,
+    LIKELY_REMOVE_RE,
+    MAIN_HEADING_PATTERN,
+    Section,
+    say,
 )
+from .extractors import epub_heading_is_weak
 from .settings import ask
 from .text_utils import preview_text, word_count
-from .extractors import epub_heading_is_weak
+
 
 def find_first_main_heading(text: str) -> Optional[re.Match]:
 
     # Structured EPUBs explicitly mark the first trusted chapter boundary.
 
     structured = re.search(
-
         r"(?m)^<<<AUDIOBOOK_STRUCTURED_CHAPTER_START>>>$",
-
         text,
-
     )
 
     if structured:
-
         return structured
 
     # Rich chapter headings such as:
@@ -38,49 +40,31 @@ def find_first_main_heading(text: str) -> Optional[re.Match]:
     # must also count as genuine book starts.
 
     rich_roman = re.search(
-
         r"(?im)^[IVXLCDM]+\.\s+\S.+$",
-
         text,
-
     )
 
-    normal_matches = list(
+    normal_matches = list(MAIN_HEADING_PATTERN.finditer(text))
 
-        MAIN_HEADING_PATTERN.finditer(text)
-
-    )
-
-    bare_matches = list(
-
-        BARE_MAIN_START_PATTERN.finditer(text)
-
-    )
+    bare_matches = list(BARE_MAIN_START_PATTERN.finditer(text))
 
     candidates = []
 
     if rich_roman:
-
         candidates.append(rich_roman)
 
     if normal_matches:
-
         candidates.append(normal_matches[0])
 
     if bare_matches:
-
         candidates.append(bare_matches[0])
 
     if not candidates:
-
         return None
 
     return min(
-
         candidates,
-
         key=lambda match: match.start(),
-
     )
 
 
@@ -96,14 +80,16 @@ def split_front_matter(front_text: str) -> list[Section]:
         return [Section("Opening Material", front_text, kind="front")]
 
     if label_matches[0].start() > 0:
-        opening = front_text[:label_matches[0].start()].strip()
+        opening = front_text[: label_matches[0].start()].strip()
         if opening:
             sections.append(Section("Opening Material", opening, kind="front"))
 
     for index, match in enumerate(label_matches):
         heading = match.group(1).strip()
         start = match.start()
-        end = label_matches[index + 1].start() if index + 1 < len(label_matches) else len(front_text)
+        end = (
+            label_matches[index + 1].start() if index + 1 < len(label_matches) else len(front_text)
+        )
         body = front_text[start:end].strip()
         if body:
             sections.append(Section(heading, body, kind="front"))
@@ -116,7 +102,6 @@ def split_main_sections(main_text: str) -> list[Section]:
     text = main_text.strip()
 
     if not text:
-
         return []
 
     # ---------------------------------------------------------------
@@ -146,69 +131,40 @@ def split_main_sections(main_text: str) -> list[Section]:
     # ---------------------------------------------------------------
 
     structured_pattern = re.compile(
-
         r"(?ms)"
-
         r"^<<<AUDIOBOOK_STRUCTURED_CHAPTER_START>>>$\n"
-
         r"(.*?)\n"
-
         r"^<<<AUDIOBOOK_STRUCTURED_CHAPTER_BODY>>>$\n"
-
         r"(.*?)\n"
-
         r"^<<<AUDIOBOOK_STRUCTURED_CHAPTER_END>>>$"
-
     )
 
-    structured_matches = list(
-
-        structured_pattern.finditer(text)
-
-    )
+    structured_matches = list(structured_pattern.finditer(text))
 
     if structured_matches:
-
         sections = []
 
         for match in structured_matches:
-
             heading = re.sub(
-
                 r"\s+",
-
                 " ",
-
                 match.group(1),
-
             ).strip()
 
             body = match.group(2).strip()
 
             if not body:
-
                 continue
 
             sections.append(
-
                 Section(
-
-                    clean_section_heading_title(
-
-                        heading
-
-                    ),
-
+                    clean_section_heading_title(heading),
                     body,
-
                     kind="main",
-
                 )
-
             )
 
         if sections:
-
             return sections
 
     # ---------------------------------------------------------------
@@ -224,149 +180,68 @@ def split_main_sections(main_text: str) -> list[Section]:
     # ---------------------------------------------------------------
 
     line_pattern = re.compile(
-
         r"(?im)^("
-
         r"(?:chapter|part|book|stave|letter|section)\s+"
-
         r"(?:[IVXLCDM]+|\d+|[A-Za-z]+)"
-
         r"(?:\s*[-:–—.]\s*.+)?"
-
         r"|"
-
         r"[IVXLCDM]+\.\s+.+"
-
         r"|"
-
         r"(?:prologue|epilogue|introduction|afterword|preface)"
-
         r")\s*$"
-
     )
 
-    matches = list(
-
-        line_pattern.finditer(text)
-
-    )
+    matches = list(line_pattern.finditer(text))
 
     if not matches:
-
-        matches = list(
-
-            MAIN_HEADING_PATTERN.finditer(text)
-
-        )
+        matches = list(MAIN_HEADING_PATTERN.finditer(text))
 
     if not matches:
-
-        matches = list(
-
-            BARE_MAIN_START_PATTERN.finditer(text)
-
-        )
+        matches = list(BARE_MAIN_START_PATTERN.finditer(text))
 
     if not matches:
-
         return [
-
             Section(
-
                 "Full Book",
-
                 text,
-
                 kind="main",
-
             )
-
         ]
 
     sections = []
 
     if matches[0].start() > 0:
+        lead = text[: matches[0].start()].strip()
 
-        lead = text[
-
-            :matches[0].start()
-
-        ].strip()
-
-        if (
-
-            lead
-
-            and word_count(lead) > 10
-
-        ):
-
+        if lead and word_count(lead) > 10:
             sections.append(
-
                 Section(
-
                     "Opening",
-
                     lead,
-
                     kind="main",
-
                 )
-
             )
 
     for index, match in enumerate(matches):
-
         heading = re.sub(
-
             r"\s+",
-
             " ",
-
-            (
-
-                match.group(1)
-
-                if match.lastindex
-
-                else match.group(0)
-
-            ),
-
+            (match.group(1) if match.lastindex else match.group(0)),
         ).strip()
 
         start = match.start()
 
-        end = (
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
 
-            matches[index + 1].start()
-
-            if index + 1 < len(matches)
-
-            else len(text)
-
-        )
-
-        body = text[
-
-            start:end
-
-        ].strip()
+        body = text[start:end].strip()
 
         if body:
-
             sections.append(
-
                 Section(
-
                     heading,
-
                     body,
-
                     kind="main",
-
                 )
-
             )
 
     # ---------------------------------------------------------------
@@ -378,71 +253,47 @@ def split_main_sections(main_text: str) -> list[Section]:
     def normalise_identity(value):
 
         value = re.sub(
-
             r"[^\w\s]",
-
             " ",
-
             value,
-
         )
 
-        return re.sub(
-
-            r"\s+",
-
-            " ",
-
-            value,
-
-        ).strip().lower()
+        return (
+            re.sub(
+                r"\s+",
+                " ",
+                value,
+            )
+            .strip()
+            .lower()
+        )
 
     def core_identity(heading):
 
-        cleaned = normalise_identity(
-
-            heading
-
-        )
+        cleaned = normalise_identity(heading)
 
         match = re.match(
-
             r"^(chapter|part|book|stave|letter|section)"
-
             r"\s+"
-
             r"([a-z0-9]+)",
-
             cleaned,
-
         )
 
         if match:
-
             return (
-
                 match.group(1),
-
                 match.group(2),
-
             )
 
         roman = re.match(
-
             r"^([ivxlcdm]+)\b",
-
             cleaned,
-
         )
 
         if roman:
-
             return (
-
                 "chapter",
-
                 roman.group(1),
-
             )
 
         return None
@@ -450,31 +301,14 @@ def split_main_sections(main_text: str) -> list[Section]:
     resolved = []
 
     for section in sections:
-
         if resolved:
-
             previous = resolved[-1]
 
-            previous_id = core_identity(
+            previous_id = core_identity(previous.heading)
 
-                previous.heading
+            current_id = core_identity(section.heading)
 
-            )
-
-            current_id = core_identity(
-
-                section.heading
-
-            )
-
-            if (
-
-                previous_id is not None
-
-                and previous_id == current_id
-
-            ):
-
+            if previous_id is not None and previous_id == current_id:
                 # Same chapter identity twice:
 
                 #
@@ -490,144 +324,61 @@ def split_main_sections(main_text: str) -> list[Section]:
                 # track only.
 
                 richer = max(
-
                     [
-
                         previous.heading,
-
                         section.heading,
-
                     ],
-
-                    key=lambda value: len(
-
-                        normalise_identity(value)
-
-                    ),
-
+                    key=lambda value: len(normalise_identity(value)),
                 )
 
                 resolved[-1] = Section(
-
-                    clean_section_heading_title(
-
-                        richer
-
-                    ),
-
-                    previous.text
-
-                    + "\n\n"
-
-                    + section.text,
-
+                    clean_section_heading_title(richer),
+                    previous.text + "\n\n" + section.text,
                     kind=previous.kind,
-
                 )
 
                 continue
 
-        resolved.append(
-
-            section
-
-        )
+        resolved.append(section)
 
     final_sections = []
 
     protected_short_titles = {
-
         "prologue",
-
         "epilogue",
-
         "introduction",
-
         "preface",
-
         "afterword",
-
     }
 
     for section in resolved:
+        words = word_count(section.text)
 
-        words = word_count(
-
-            section.text
-
-        )
-
-        title_key = normalise_identity(
-
-            section.heading
-
-        )
+        title_key = normalise_identity(section.heading)
 
         # A tiny section is allowed only when its heading strongly proves that
 
         # it is an intentional standalone section.
 
-        intentional_short = (
+        intentional_short = title_key in protected_short_titles
 
-            title_key
-
-            in protected_short_titles
-
-        )
-
-        if (
-
-            words < 80
-
-            and not intentional_short
-
-            and final_sections
-
-        ):
-
+        if words < 80 and not intentional_short and final_sections:
             previous = final_sections[-1]
 
-            previous_id = core_identity(
+            previous_id = core_identity(previous.heading)
 
-                previous.heading
+            current_id = core_identity(section.heading)
 
-            )
-
-            current_id = core_identity(
-
-                section.heading
-
-            )
-
-            if (
-
-                current_id is None
-
-                or current_id == previous_id
-
-            ):
-
+            if current_id is None or current_id == previous_id:
                 final_sections[-1] = Section(
-
                     previous.heading,
-
-                    previous.text
-
-                    + "\n\n"
-
-                    + section.text,
-
+                    previous.text + "\n\n" + section.text,
                     kind=previous.kind,
-
                 )
 
                 continue
 
-        final_sections.append(
-
-            section
-
-        )
+        final_sections.append(section)
 
     return final_sections
 
@@ -738,102 +489,49 @@ def classify_front_section(section: Section) -> str:
 def review_front_matter(front_sections: list[Section]) -> list[Section]:
 
     if not front_sections:
-
         return []
 
     kept = []
 
     for index, section in enumerate(
-
         front_sections,
-
         start=1,
-
     ):
-
         while True:
+            assessment = classify_front_section(section)
 
-            assessment = classify_front_section(
+            say(f"Front matter section {index} of {len(front_sections)}.")
 
-                section
+            say(f"Heading: {section.heading or 'Opening Material'}.")
 
+            say(f"Assessment: {assessment}.")
+
+            say(f"Preview: {preview_text(section.text)}")
+
+            answer = (
+                ask("Type y to keep this section, n to remove it, or r to repeat.").strip().lower()
             )
-
-            say(
-
-                f"Front matter section {index} "
-
-                f"of {len(front_sections)}."
-
-            )
-
-            say(
-
-                f"Heading: "
-
-                f"{section.heading or 'Opening Material'}."
-
-            )
-
-            say(
-
-                f"Assessment: {assessment}."
-
-            )
-
-            say(
-
-                f"Preview: "
-
-                f"{preview_text(section.text)}"
-
-            )
-
-            answer = ask(
-
-                "Type y to keep this section, "
-
-                "n to remove it, "
-
-                "or r to repeat."
-
-            ).strip().lower()
 
             if answer in {
-
                 "y",
-
                 "yes",
-
                 "keep",
-
             }:
-
                 kept.append(section)
 
                 break
 
             if answer in {
-
                 "n",
-
                 "no",
-
                 "remove",
-
             }:
-
                 break
 
             if answer == "r":
-
                 continue
 
-            say(
-
-                "Please type y, n, or r."
-
-            )
+            say("Please type y, n, or r.")
 
     return kept
 
@@ -844,7 +542,7 @@ def split_book_text(text: str) -> tuple[list[Section], list[Section], str]:
         return [], [Section("Full Book", text.strip(), kind="main")], "Full Book"
 
     front_text = text[: first_main.start()].strip()
-    main_text = text[first_main.start():].strip()
+    main_text = text[first_main.start() :].strip()
     front_sections = split_front_matter(front_text)
     main_sections = split_main_sections(main_text)
     main_start = main_sections[0].heading if main_sections else "Full Book"
@@ -877,217 +575,105 @@ def looks_like_generic_heading_label(value: str) -> bool:
 def clean_spoken_section_text(text: str, heading: str) -> str:
 
     lines = [
-
         re.sub(
-
             r"\s+",
-
             " ",
-
             line,
-
         ).strip()
-
         for line in text.splitlines()
-
     ]
 
-    lines = [
-
-        line
-
-        for line in lines
-
-        if line
-
-    ]
+    lines = [line for line in lines if line]
 
     if not lines:
-
         return text.strip()
 
-    heading_clean = clean_section_heading_title(
-
-        heading
-
-    ).strip()
+    heading_clean = clean_section_heading_title(heading).strip()
 
     label = ""
 
     subtitle = ""
 
     structured_match = re.match(
-
         r"(?i)^("
-
         r"(?:chapter|part|book|stave|letter|section)"
-
         r"\s+"
-
         r"(?:[IVXLCDM]+|\d+|[A-Za-z]+)"
-
         r"|"
-
         r"[IVXLCDM]+"
-
         r")"
-
         r"(?:\s*[.:\-–—]\s*(.+))?$",
-
         heading_clean,
-
     )
 
     if structured_match:
+        label = (structured_match.group(1) or "").strip()
 
-        label = (
-
-            structured_match.group(1)
-
-            or ""
-
-        ).strip()
-
-        subtitle = (
-
-            structured_match.group(2)
-
-            or ""
-
-        ).strip()
+        subtitle = (structured_match.group(2) or "").strip()
 
     else:
-
         label = heading_clean
 
     def normalized(value):
 
         value = re.sub(
-
             r"[^\w\s]",
-
             " ",
-
             value,
-
         )
 
-        return re.sub(
+        return (
+            re.sub(
+                r"\s+",
+                " ",
+                value,
+            )
+            .strip()
+            .lower()
+        )
 
-            r"\s+",
+    label_key = normalized(label)
 
-            " ",
+    subtitle_key = normalized(subtitle)
 
-            value,
-
-        ).strip().lower()
-
-    label_key = normalized(
-
-        label
-
-    )
-
-    subtitle_key = normalized(
-
-        subtitle
-
-    )
-
-    heading_key = normalized(
-
-        heading_clean
-
-    )
+    heading_key = normalized(heading_clean)
 
     while lines:
+        first_key = normalized(lines[0])
 
-        first_key = normalized(
-
-            lines[0]
-
-        )
-
-        if (
-
-            first_key
-
-            and first_key
-
-            in {
-
-                label_key,
-
-                subtitle_key,
-
-                heading_key,
-
-            }
-
-        ):
-
+        if first_key and first_key in {
+            label_key,
+            subtitle_key,
+            heading_key,
+        }:
             lines.pop(0)
 
             continue
 
         break
 
-    if (
-
-        not subtitle
-
-        and lines
-
-        and len(
-
-            lines[0].split()
-
-        ) <= 12
-
-    ):
-
+    if not subtitle and lines and len(lines[0].split()) <= 12:
         candidate = lines[0]
 
-        candidate_key = normalized(
-
-            candidate
-
-        )
+        candidate_key = normalized(candidate)
 
         if (
-
             candidate_key
-
             and candidate_key
-
             not in {
-
                 label_key,
-
                 heading_key,
-
             }
-
             and not candidate.endswith(
-
                 (
-
                     ".",
-
                     "!",
-
                     "?",
-
                     ":",
-
                     ";",
-
                 )
-
             )
-
         ):
-
             subtitle = candidate
 
             subtitle_key = candidate_key
@@ -1095,31 +681,13 @@ def clean_spoken_section_text(text: str, heading: str) -> str:
             lines.pop(0)
 
     while lines:
+        first_key = normalized(lines[0])
 
-        first_key = normalized(
-
-            lines[0]
-
-        )
-
-        if (
-
-            first_key
-
-            and first_key
-
-            in {
-
-                label_key,
-
-                subtitle_key,
-
-                heading_key,
-
-            }
-
-        ):
-
+        if first_key and first_key in {
+            label_key,
+            subtitle_key,
+            heading_key,
+        }:
             lines.pop(0)
 
             continue
@@ -1129,43 +697,22 @@ def clean_spoken_section_text(text: str, heading: str) -> str:
     blocks = []
 
     if label:
-
-        blocks.append(
-
-            label
-
-        )
+        blocks.append(label)
 
     if subtitle:
+        blocks.append(subtitle)
 
-        blocks.append(
-
-            subtitle
-
-        )
-
-    body = "\n".join(
-
-        lines
-
-    ).strip()
+    body = "\n".join(lines).strip()
 
     if body:
+        blocks.append(body)
 
-        blocks.append(
-
-            body
-
-        )
-
-    return "\n\n".join(
-
-        blocks
-
-    ).strip()
+    return "\n\n".join(blocks).strip()
 
 
-def build_track_plan(title: str, author: str, kept_front: list[Section], main_sections: list[Section]) -> list[Section]:
+def build_track_plan(
+    title: str, author: str, kept_front: list[Section], main_sections: list[Section]
+) -> list[Section]:
     tracks: list[Section] = []
     if should_create_intro(kept_front, title, author):
         intro_text = f"{title}. By {author}."
@@ -1173,5 +720,3 @@ def build_track_plan(title: str, author: str, kept_front: list[Section], main_se
     tracks.extend(kept_front)
     tracks.extend(main_sections)
     return tracks
-
-

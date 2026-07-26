@@ -5,6 +5,7 @@ from typing import Optional
 
 from .common import SUPPORTED_EXTENSIONS
 
+
 def unique_destination(directory: Path, source_name: str) -> Path:
     candidate = directory / source_name
     if not candidate.exists():
@@ -37,9 +38,12 @@ def handle_successful_original(
         result = subprocess.run(
             [
                 "osascript",
-                "-e", "on run argv",
-                "-e", 'tell application "Finder" to delete POSIX file (item 1 of argv)',
-                "-e", "end run",
+                "-e",
+                "on run argv",
+                "-e",
+                'tell application "Finder" to delete POSIX file (item 1 of argv)',
+                "-e",
+                "end run",
                 str(source_path),
             ],
             text=True,
@@ -58,8 +62,7 @@ def handle_successful_original(
 
         raise RuntimeError(
             "The audiobook was created, but the original is still present "
-            "and could not be moved to the Bin. "
-            + error_detail
+            "and could not be moved to the Bin. " + error_detail
         )
 
     return "Original kept in Books to Convert."
@@ -69,8 +72,7 @@ def find_supported_sources(source_dir: Path) -> list[Path]:
     return sorted(
         path
         for path in source_dir.iterdir()
-        if path.is_file()
-        and path.suffix.lower() in SUPPORTED_EXTENSIONS
+        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
     )
 
 
@@ -86,5 +88,3 @@ def unique_filename(base_name: str, used: set[str]) -> str:
 
 def write_report(report_path: Path, lines: list[str]) -> None:
     report_path.write_text("\n".join(lines), encoding="utf-8")
-
-
