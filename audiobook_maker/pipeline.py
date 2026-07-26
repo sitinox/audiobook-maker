@@ -24,6 +24,7 @@ from .chapters import (
 )
 from .common import (
     VERSION,
+    ConversionOptions,
     ProjectPaths,
     Settings,
     say,
@@ -214,9 +215,16 @@ def _choose_book_identity(
     suggested_title: str,
     suggested_author: str,
     run_authors: list[str],
+    options: ConversionOptions,
 ) -> tuple[str, str]:
     say("")
     say(f"Processing: {source_path.name}")
+
+    if options.non_interactive:
+        return (
+            options.title or suggested_title,
+            options.author or suggested_author,
+        )
 
     title = choose_title(source_path, suggested_title)
     author = choose_author(
@@ -232,6 +240,7 @@ def _prepare_book(
     settings: Settings,
     run_authors: list[str],
     paths: ProjectPaths,
+    options: ConversionOptions,
 ) -> PreparedBook:
     (
         extracted,
@@ -250,6 +259,7 @@ def _prepare_book(
         suggested_title,
         suggested_author,
         run_authors,
+        options,
     )
     book_title = safe_filename(title)
 
@@ -292,8 +302,16 @@ def _announce_book_analysis(book: PreparedBook, settings: Settings) -> None:
         say(f"Warning: {warning}")
 
 
-def _review_track_plan(book: PreparedBook, settings: Settings) -> Optional[TrackPlan]:
-    kept_front = review_front_matter(book.front_sections)
+def _review_track_plan(
+    book: PreparedBook,
+    settings: Settings,
+    options: ConversionOptions,
+) -> Optional[TrackPlan]:
+    if options.non_interactive:
+        kept_front = book.front_sections if options.front_matter == "keep" else []
+    else:
+        kept_front = review_front_matter(book.front_sections)
+
     tracks = build_track_plan(
         book.title,
         book.author,
@@ -309,6 +327,13 @@ def _review_track_plan(book: PreparedBook, settings: Settings) -> Optional[Track
         "Estimated spoken audio length: about "
         f"{format_duration(estimate_duration_seconds(kept_words, settings.rate))}."
     )
+
+    if options.non_interactive:
+        return TrackPlan(
+            tracks=tracks,
+            kept_front=kept_front,
+            kept_words=kept_words,
+        )
 
     while True:
         choice = ask("Type yes to create audio, stop to cancel this book, or r.").lower()
@@ -662,16 +687,19 @@ def process_source(
     run_authors: list[str],
     force: bool,
     paths: ProjectPaths,
+    options: Optional[ConversionOptions] = None,
 ) -> ConversionOutcome:
+    options = options or ConversionOptions()
     book = _prepare_book(
         source_path,
         settings,
         run_authors,
         paths,
+        options,
     )
     _announce_book_analysis(book, settings)
 
-    track_plan = _review_track_plan(book, settings)
+    track_plan = _review_track_plan(book, settings, options)
 
     if track_plan is None:
         return ConversionOutcome.CANCELLED
