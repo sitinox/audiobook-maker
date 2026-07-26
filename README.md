@@ -51,26 +51,45 @@ Speech and desktop notifications use the built-in macOS `say` and `osascript` co
 
 ## Installation
 
-Install the required system tools with Homebrew:
+### Simple macOS installer
 
-    brew install python ffmpeg poppler
+Download both of these files from the latest GitHub release:
 
-Install Audiobook Maker from a local checkout:
+- `Install Audiobook Maker.command`
+- `Uninstall Audiobook Maker.command`
+
+Open `Install Audiobook Maker.command`. The installer:
+
+- checks that it is running on macOS;
+- installs Python, ffmpeg, and Poppler with Homebrew when required;
+- creates a private Python environment in `~/Library/Application Support/Audiobook Maker`;
+- installs the `audiobook` command in `~/.local/bin`;
+- adds that command folder to the Terminal PATH once;
+- verifies the installed version.
+
+The installer is safe to run again when updating or repairing the installation.
+
+If macOS blocks the downloaded installer, open System Settings, choose Privacy & Security, and allow the installer to run.
+
+After installation, open a new Terminal window and run:
+
+    audiobook
+
+To uninstall the program, open `Uninstall Audiobook Maker.command`. The uninstaller removes the managed command and Python environment but preserves settings, source books, finished audiobooks, chapter text, extracted text, and reports.
+
+### Install from source
+
+Developers can install from a local checkout:
 
     git clone https://github.com/sitinox/audiobook-maker.git
-
     cd audiobook-maker
-
     python3 -m venv .venv
-
     source .venv/bin/activate
-
     python -m pip install .
 
 Run it with:
 
     audiobook
-
 ## Basic use
 
 1. Run `audiobook`.
