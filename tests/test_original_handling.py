@@ -11,7 +11,11 @@ def test_keep_leaves_original_in_place(tmp_path):
 
     source.write_text("test", encoding="utf-8")
 
-    result = files.handle_successful_original(source, "keep")
+    result = files.handle_successful_original(
+        source,
+        "keep",
+        tmp_path / "Converted Originals",
+    )
 
     assert source.exists()
 
@@ -25,9 +29,15 @@ def test_archive_moves_original(tmp_path, monkeypatch):
 
     archive = tmp_path / "Converted Originals"
 
-    monkeypatch.setattr(files, "CONVERTED_ORIGINALS_DIR", archive)
+    result = files.handle_successful_original(
 
-    result = files.handle_successful_original(source, "archive")
+        source,
+
+        "archive",
+
+        archive,
+
+    )
 
     assert not source.exists()
 
@@ -47,9 +57,15 @@ def test_archive_uses_unique_name(tmp_path, monkeypatch):
 
     (archive / "Book.txt").write_text("existing", encoding="utf-8")
 
-    monkeypatch.setattr(files, "CONVERTED_ORIGINALS_DIR", archive)
+    result = files.handle_successful_original(
 
-    result = files.handle_successful_original(source, "archive")
+        source,
+
+        "archive",
+
+        archive,
+
+    )
 
     assert not source.exists()
 
@@ -73,7 +89,11 @@ def test_trash_reports_success_when_original_disappears(tmp_path, monkeypatch):
 
     monkeypatch.setattr(files.subprocess, "run", fake_run)
 
-    result = files.handle_successful_original(source, "trash")
+    result = files.handle_successful_original(
+        source,
+        "trash",
+        tmp_path / "Converted Originals",
+    )
 
     assert not source.exists()
 

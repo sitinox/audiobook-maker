@@ -9,7 +9,7 @@ from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 
 from .common import (
-    BeautifulSoup, EXTRACTED_TEXT_DIR, ExtractedSource, ITEM_DOCUMENT,
+    BeautifulSoup, ExtractedSource, ITEM_DOCUMENT,
     ITEM_IMAGE, MAIN_HEADING_PATTERN, docx, ebook_epub, run_command,
 )
 from .text_utils import clean_text, safe_filename
@@ -3433,9 +3433,11 @@ def extract_source_text(
 
     book_title: str,
 
+    extracted_text_dir: Path,
+
 ) -> ExtractedSource:
 
-    EXTRACTED_TEXT_DIR.mkdir(
+    extracted_text_dir.mkdir(
 
         parents=True,
 
@@ -3459,7 +3461,7 @@ def extract_source_text(
 
     output_text_path = (
 
-        EXTRACTED_TEXT_DIR
+        extracted_text_dir
 
         / f"{safe_filename(book_title)}.txt"
 

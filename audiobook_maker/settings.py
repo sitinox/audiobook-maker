@@ -110,12 +110,21 @@ def load_settings() -> Settings:
         if bitrate not in {128, 192, 256, 320}:
             bitrate = DEFAULT_BITRATE
 
+        project_dir_value = data.get("project_dir")
+        project_dir = (
+            Path(project_dir_value).expanduser()
+            if isinstance(project_dir_value, str)
+            and project_dir_value.strip()
+            else None
+        )
+
         return Settings(
             voice=str(data.get("voice", DEFAULT_VOICE)),
             rate=_valid_rate(data.get("rate", DEFAULT_RATE)),
             bitrate=bitrate,
             output_format=output_format,
             original_action=original_action,
+            project_dir=project_dir,
         )
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
         backup_path = _corrupt_settings_backup_path()
@@ -142,6 +151,11 @@ def save_settings(settings: Settings) -> None:
             "bitrate": settings.bitrate,
             "output_format": settings.output_format,
             "original_action": settings.original_action,
+            "project_dir": (
+                str(settings.project_dir)
+                if settings.project_dir is not None
+                else None
+            ),
         },
         indent=2,
     ) + "\n"
@@ -289,9 +303,35 @@ def ask(prompt: str) -> str:
 
 
 
+def choose_project_dir(current_dir: Optional[Path] = None) -> Path:
+    default_dir = current_dir or (Path.home() / "Audiobook Maker")
+
+    while True:
+        say("")
+        say(f"Current suggested project folder: {default_dir}")
+        answer = ask(
+            "Press Enter to use this folder, type a different folder path, or type r to repeat."
+        )
+
+        if answer.lower() == "r":
+            continue
+        if not answer:
+            return default_dir.expanduser()
+
+        return Path(answer).expanduser()
+
+
 def confirm_settings(settings: Settings) -> Settings:
 
     while True:
+
+        if settings.project_dir is None:
+
+            settings.project_dir = choose_project_dir()
+
+            save_settings(settings)
+
+        say(f"Project folder: {settings.project_dir}")
 
         say(f"Voice: {settings.voice}")
 
@@ -352,6 +392,20 @@ def confirm_settings(settings: Settings) -> Settings:
 
 
 def change_settings(settings: Settings) -> Settings:
+
+    say(f"Project folder is currently {settings.project_dir}.")
+
+    project_choice = ask(
+        "Press Enter to keep it, or type change to choose another folder."
+    ).lower()
+
+    if project_choice in {"change", "c"}:
+
+        settings.project_dir = choose_project_dir(settings.project_dir)
+
+    elif project_choice:
+
+        say("Project folder unchanged. Type change to choose another folder.")
 
     say(f"Voice is currently {settings.voice}.")
 

@@ -1,11 +1,10 @@
 import argparse
 
 from .common import (
-    BACKUPS_DIR, BeautifulSoup, CHANGELOG_TEXT, CHAPTER_TEXT_DIR,
-    CONVERTED_ORIGINALS_DIR, EXTRACTED_TEXT_DIR, FINISHED_DIR, ID3,
-    MAX_SPEECH_RATE, MIN_SPEECH_RATE, PROJECT_DIR, REPORTS_DIR, SAMPLE_RATE,
-    SCRIPTS_DIR, SOURCE_DIR, SUPPORTED_EXTENSIONS, Settings, VERSION,
-    check_tool, docx, ebook_epub, say,
+    BeautifulSoup, CHANGELOG_TEXT, ID3, MAX_SPEECH_RATE,
+    MIN_SPEECH_RATE, ProjectPaths, SAMPLE_RATE,
+    SUPPORTED_EXTENSIONS, Settings, VERSION, check_tool,
+    docx, ebook_epub, say,
 )
 from .settings import (
     check_voice, choose_book_original_action, choose_run_original_action,
@@ -43,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def show_settings(settings: Settings) -> None:
+def show_settings(settings: Settings, paths: ProjectPaths) -> None:
 
     say(f"Audiobook Maker {VERSION}")
 
@@ -89,15 +88,15 @@ def show_settings(settings: Settings) -> None:
 
     )
 
-    say(f"Project folder: {PROJECT_DIR}")
+    say(f"Project folder: {paths.project_dir}")
 
-    say(f"Source folder: {SOURCE_DIR}")
+    say(f"Source folder: {paths.source_dir}")
 
-    say(f"Finished audiobooks folder: {FINISHED_DIR}")
+    say(f"Finished audiobooks folder: {paths.finished_dir}")
 
-    say(f"Converted originals folder: {CONVERTED_ORIGINALS_DIR}")
+    say(f"Converted originals folder: {paths.converted_originals_dir}")
 
-    say(f"Reports folder: {REPORTS_DIR}")
+    say(f"Reports folder: {paths.reports_dir}")
 
 
 
@@ -118,9 +117,6 @@ def main() -> int:
         show_changelog()
         return 0
 
-    for folder in [SOURCE_DIR, FINISHED_DIR, CHAPTER_TEXT_DIR, EXTRACTED_TEXT_DIR, REPORTS_DIR, SCRIPTS_DIR, BACKUPS_DIR, CONVERTED_ORIGINALS_DIR]:
-        folder.mkdir(parents=True, exist_ok=True)
-
     settings = load_settings()
     if args.voice:
         settings.voice = args.voice
@@ -130,8 +126,19 @@ def main() -> int:
         settings.bitrate = args.bitrate
     save_settings(settings)
 
+    if settings.project_dir is None:
+        settings = confirm_settings(settings)
+
+    if settings.project_dir is None:
+        raise RuntimeError("Project folder was not configured.")
+
+    paths = ProjectPaths.from_project_dir(settings.project_dir)
+
+    for folder in paths.required_directories():
+        folder.mkdir(parents=True, exist_ok=True)
+
     if args.settings:
-        show_settings(settings)
+        show_settings(settings, paths)
         return 0
 
     check_tool("say")
@@ -144,9 +151,17 @@ def main() -> int:
 
     settings = confirm_settings(settings)
 
-    sources = find_supported_sources()
+    if settings.project_dir is None:
+        raise RuntimeError("Project folder was not configured.")
+
+    paths = ProjectPaths.from_project_dir(settings.project_dir)
+
+    for folder in paths.required_directories():
+        folder.mkdir(parents=True, exist_ok=True)
+
+    sources = find_supported_sources(paths.source_dir)
     if not sources:
-        say(f"No supported files found in: {SOURCE_DIR}")
+        say(f"No supported files found in: {paths.source_dir}")
         say("Supported files: PDF, TXT, DOCX, EPUB.")
         return 0
 
@@ -177,6 +192,7 @@ def main() -> int:
                 settings,
                 run_authors,
                 args.force,
+                paths,
             )
             if outcome is ConversionOutcome.COMPLETED:
                 action = run_original_action
@@ -185,7 +201,11 @@ def main() -> int:
                     if apply_to_remaining:
                         run_original_action = action
                         say(f"This choice will also apply to all remaining successful books in this run: {original_action_description(action)}")
-                original_result = handle_successful_original(source, action)
+                original_result = handle_successful_original(
+                    source,
+                    action,
+                    paths.converted_originals_dir,
+                )
                 say(original_result)
                 completed += 1
         except Exception as error:
@@ -198,7 +218,7 @@ def main() -> int:
     say("Run complete.")
     say(f"Books completed: {completed}")
     say(f"Books failed: {failed}")
-    say(f"Finished audiobooks are in: {FINISHED_DIR}")
+    say(f"Finished audiobooks are in: {paths.finished_dir}")
     notify_run_complete(completed, failed, settings.voice)
     return 1 if failed else 0
 
