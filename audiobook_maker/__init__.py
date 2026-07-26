@@ -1,5 +1,3 @@
-"""Audiobook Maker package."""
+__version__ = "1.0.0"
 
-from .common import VERSION
-
-__all__ = ["VERSION"]
+__all__ = ["__version__"]

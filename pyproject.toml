@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 name = "audiobook-maker"
 
-version = "5.1.0"
+dynamic = ["version"]
 
 description = "An accessible macOS command-line tool for converting PDF, TXT, DOCX, and EPUB books into MP3 and M4B audiobooks."
 
@@ -42,6 +42,14 @@ audiobook = "audiobook_maker.cli:main"
 [tool.setuptools]
 
 packages = ["audiobook_maker"]
+
+[tool.setuptools.dynamic]
+
+version = {attr = "audiobook_maker.__version__"}
+
+[tool.setuptools.package-data]
+
+audiobook_maker = ["CHANGELOG.md"]
 
 
 [project.optional-dependencies]
