@@ -1,7 +1,8 @@
 import argparse
+from importlib.resources import files
 
 from .common import (
-    BeautifulSoup, CHANGELOG_TEXT, ID3, MAX_SPEECH_RATE,
+    BeautifulSoup, ID3, MAX_SPEECH_RATE,
     MIN_SPEECH_RATE, ProjectPaths, SAMPLE_RATE,
     SUPPORTED_EXTENSIONS, Settings, VERSION, check_tool,
     docx, ebook_epub, say,
@@ -70,7 +71,7 @@ def show_settings(settings: Settings, paths: ProjectPaths) -> None:
 
     say("Supported formats: PDF, TXT, DOCX, EPUB")
 
-    say("Stable checkpoint: v5.1.0")
+    say(f"Stable version: {VERSION}")
 
     say(
 
@@ -101,7 +102,8 @@ def show_settings(settings: Settings, paths: ProjectPaths) -> None:
 
 
 def show_changelog() -> None:
-    say(CHANGELOG_TEXT.strip())
+    changelog = files("audiobook_maker").joinpath("CHANGELOG.md").read_text(encoding="utf-8")
+    say(changelog.strip())
 
 
 def main() -> int:

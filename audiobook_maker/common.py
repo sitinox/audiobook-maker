@@ -36,7 +36,9 @@ try:
 except ImportError:
     BeautifulSoup = None
 
-VERSION = "v5.1.0"
+from . import __version__
+
+VERSION = f"v{__version__}"
 DEFAULT_VOICE = "Daniel (Enhanced)"
 DEFAULT_RATE = 325
 MIN_SPEECH_RATE = 80
@@ -82,99 +84,6 @@ class ProjectPaths:
             self.reports_dir,
             self.converted_originals_dir,
         )
-
-CHANGELOG_TEXT = """Audiobook Maker changelog
-
-Current stable version: v5.1.0
-Stable checkpoint: per-run and per-book original-file handling with accessible completion notifications.
-
-v5.0.0 - M4B output and modular architecture
-
-- Added complete M4B audiobook output with embedded chapters, title, author, cover art, and duration verification.
-
-- Added output choices for MP3, M4B, or both.
-
-- Modularised Audiobook Maker into dedicated modules for the command-line interface, settings, extraction, chapter handling, audio, M4B creation, files, notifications, and conversion orchestration.
-
-- Added universal cover-art handling across EPUB, PDF, TXT, and DOCX sources.
-
-- Added companion cover-art support and overrides.
-
-- Added PDF first-page artwork and DOCX early embedded-image detection.
-
-- Improved structured EPUB extraction, table-of-contents handling, and chapter parsing.
-
-- Added completion notifications and flexible handling of successfully converted original files.
-
-- Confirmed TXT, DOCX, and PDF cover-art behaviour with disposable automated regression tests.
-
-
-v4.2.1 - Per-run and per-book original handling
-- Added a choice at the start of each run to keep, archive, or bin all successful originals, or ask after each successful book.
-- Per-book prompts can apply the selected action to all remaining successful books in the same run.
-- Added r to repeat all new original-file choice menus.
-
-v4.2.0 - Original-file handling and completion notifications
-- Added a remembered choice to keep successful source books, move them to Converted Originals, or move them to the Bin.
-- Source files are only handled after conversion, tagging, and report creation complete successfully.
-- Added a spoken completion message and a macOS notification with a sound.
-- Added a distinct failure notification when one or more books fail.
-- Added the Converted Originals folder to automatic folder creation.
-- Renamed the temporary working-folder prefix to Audiobook Maker.
-
-Stable checkpoint: renamed project from PDF Audiobook Maker to Audiobook Maker; EPUB support is working on A Christmas Carol, including correct stave splitting, no duplicate spoken stave headings, and clearer heading pauses before the chapter body.
-
-v4.1.0 - Project rename and folder cleanup
-- Renamed the project from PDF Audiobook Maker to Audiobook Maker because the tool now supports PDF, TXT, DOCX, and EPUB sources.
-- Renamed the source folder from 'PDFs to Convert' to 'Books to Convert'.
-- Updated help, settings, built-in changelog, and startup text to use the new project name.
-- Kept the stable v4.0.6 EPUB behaviour unchanged.
-
-v4.0.6 - Stable EPUB spoken-heading polish
-- Fixed spoken EPUB chapter openings so duplicate heading labels are not read twice.
-- Added punctuation and a blank line between a heading/subtitle and the chapter body, so macOS say gives the opening more breathing room.
-- Kept useful subtitles such as 'Marley's Ghost' while removing repeated labels such as repeated 'Stave I'.
-- Confirmed expected structure for A Christmas Carol: 5 main staves plus the generated intro track.
-
-v4.0.5 - Spoken duplicate heading cleanup
-- Cleaned repeated heading labels at the start of generated chapter text.
-- Fixed cases where the MP3 title was correct but the audio itself still repeated the section label.
-
-v4.0.4 - Stronger title cleanup
-- Stripped generic duplicate title endings such as 'Stave I - Stave', 'Chapter One - Chapter', and similar patterns.
-- Kept meaningful subtitles when they add useful information.
-
-v4.0.3 - Cosmetic EPUB title cleanup
-- Improved EPUB track title cleaning for generic heading/subheading combinations.
-
-v4.0.2 - Tiny heading-track merge
-- Merged one-second heading-only EPUB sections into the following real section.
-- Fixed A Christmas Carol style output where each stave was being split into a tiny heading track and a body track.
-
-v4.0.1 - EPUB heading polish
-- Added Stave as a recognised main heading type.
-- Improved EPUB heading selection so weak headings like I or One are not trusted when better nearby headings exist.
-
-v4.0 - EPUB support
-- Added EPUB support using structured spine extraction.
-- Added EPUB metadata title and author suggestions.
-- Added EPUB cover-art detection and embedding when cover art is available.
-- Added settings display with --settings.
-- Kept existing PDF, TXT, and DOCX support.
-
-v3.x - Multi-format and quality improvements
-- Added TXT and DOCX support.
-- Added configurable MP3 bitrate: 128, 192, 256, or 320 kbps.
-- Standardised output to 44.1 kHz MP3.
-- Improved reports, duration estimates, actual duration checks, and ID3 tagging.
-- Standardised repeat prompts to r.
-
-v2.x - Front matter and tagging improvements
-- Added front-matter-only review.
-- Added title/author intro track when needed.
-- Added ID3 tagging through mutagen.
-- Improved command-line help and reports.
-"""
 
 DIVIDER_PATTERN = re.compile(r"(?m)^\s*(?:[*~_\-=]\s*){3,}\s*$")
 PAGE_NUMBER_PATTERN = re.compile(r"(?m)^\s*\d+\s*$")

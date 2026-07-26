@@ -145,7 +145,7 @@ Run the suite with:
 
     python -m pytest
 
-The v5.1.0 release candidate passes 24 automated tests.
+The 1.0.0 release passes 34 automated tests.
 
 ## Limitations
 
@@ -158,18 +158,13 @@ The v5.1.0 release candidate passes 24 automated tests.
 
 ## Project status
 
-Version 5.1.0 is the first public release.
+Version 1.0.0 is the first stable public release.
 
-Version 5.0.0 was the preceding internal milestone, introducing the modular application structure and the expanded output system on which this release is built.
+Earlier version numbers were used only during private development. The full development history remains available through the repository commits, pull requests, and closed issues.
 
 ## Version history
 
-See `CHANGELOG.md`.
-
-Release notes are available in:
-
-- `RELEASE_NOTES_v5.1.0.md`
-- `RELEASE_NOTES_v5.0.0.md`
+See `CHANGELOG.md` and the GitHub Releases page.
 
 ## Licence
 
