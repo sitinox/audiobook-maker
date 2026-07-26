@@ -1,6 +1,7 @@
 # Audiobook Maker
 
 [![CI](https://github.com/sitinox/audiobook-maker/actions/workflows/ci.yml/badge.svg)](https://github.com/sitinox/audiobook-maker/actions/workflows/ci.yml)
+
 Audiobook Maker is an accessible macOS command-line application that converts DRM-free PDF, TXT, DOCX, and EPUB books into chaptered MP3 audiobooks, single-file M4B audiobooks, or both.
 
 It is designed for keyboard and VoiceOver use.
@@ -12,39 +13,28 @@ It is designed for keyboard and VoiceOver use.
 ## Main features
 
 - Converts PDF, TXT, DOCX, and DRM-free EPUB books.
-
 - Creates separately tagged MP3 chapters, one chaptered M4B, or both.
-
 - Embeds chapters, title, author, narrator, cover art, and other metadata.
-
 - Reviews front matter and suggests titles and authors before conversion.
-
+- Supports fully non-interactive conversion for scripts and repeatable workflows.
 - Uses EPUB artwork, companion images, PDF first-page artwork, or suitable DOCX images when available.
-
 - Estimates audiobook duration and verifies completed audio.
-
 - Produces a conversion report for each book.
-
 - Provides spoken and macOS completion notifications.
-
 - Lets users keep, archive, uniquely rename, or move successfully converted originals to the Bin.
-
 - Protects existing output and source books when conversion fails or is cancelled.
-
 - Lets users choose where the Audiobook Maker project folder is stored.
+- Includes a repeatable macOS installer and matching uninstaller.
 
 ## Requirements
 
-Audiobook Maker currently supports macOS.
+Audiobook Maker supports macOS and Python 3.9 through 3.14.
 
 It requires:
 
 - Python 3.9 or newer;
-
 - ffmpeg and ffprobe;
-
 - Poppler, including `pdftotext`;
-
 - the Python packages declared in `pyproject.toml`.
 
 Speech and desktop notifications use the built-in macOS `say` and `osascript` commands.
@@ -53,7 +43,7 @@ Speech and desktop notifications use the built-in macOS `say` and `osascript` co
 
 ### Simple macOS installer
 
-Download both of these files from the latest GitHub release:
+Download these files from the latest GitHub release:
 
 - `Install Audiobook Maker.command`
 - `Uninstall Audiobook Maker.command`
@@ -90,16 +80,13 @@ Developers can install from a local checkout:
 Run it with:
 
     audiobook
+
 ## Basic use
 
 1. Run `audiobook`.
-
 2. Choose or confirm the project folder when prompted.
-
 3. Put a DRM-free PDF, TXT, DOCX, or EPUB book in its `Books to Convert` folder.
-
 4. Run `audiobook` again.
-
 5. Follow the spoken and written prompts.
 
 Audiobook Maker guides you through output format, voice, speech rate, bitrate, title, author, front matter, and original-file handling.
@@ -107,23 +94,49 @@ Audiobook Maker guides you through output format, voice, speech rate, bitrate, t
 Useful commands:
 
     audiobook --help
-
     audiobook --settings
-
     audiobook --changelog
-
     audiobook --version
+
+## Non-interactive use
+
+Use `--non-interactive` or its `--yes` alias to run without prompts.
+
+Process one explicit source file:
+
+    audiobook \
+      --source "/path/to/Book.epub" \
+      --non-interactive \
+      --title "Book Title" \
+      --author "Author Name" \
+      --front-matter skip \
+      --output both \
+      --original archive \
+      --project-dir "$HOME/Audiobook Maker"
+
+Process every supported file in the configured `Books to Convert` folder:
+
+    audiobook --all --non-interactive
+
+Available overrides include:
+
+- `--title` and `--author`;
+- `--front-matter keep|skip`;
+- `--output mp3|m4b|both`;
+- `--original keep|archive|trash`;
+- `--project-dir`;
+- `--voice`, `--rate`, and `--bitrate`;
+- `--force`.
+
+In non-interactive mode, Audiobook Maker uses command-line values first, then saved settings and detected metadata. It fails clearly instead of falling back to a prompt when required configuration is missing.
 
 ## Supported formats
 
 ### Input
 
 - PDF
-
 - TXT
-
 - DOCX
-
 - DRM-free EPUB
 
 ### Output
@@ -139,11 +152,8 @@ Useful commands:
 Audiobook Maker can use:
 
 - artwork stored inside an EPUB;
-
 - a companion image with the same filename as the source book;
-
 - suitable artwork from the first page of a PDF;
-
 - a suitable early embedded image from a DOCX file.
 
 Companion artwork takes priority over automatically detected artwork. Books without usable artwork can still be converted.
@@ -152,7 +162,9 @@ Companion artwork takes priority over automatically detected artwork. Books with
 
 Audiobook Maker was developed for keyboard and VoiceOver use.
 
-Prompts are written to Terminal and spoken aloud. Choices can be repeated by typing `r`, and completion is announced with speech and a macOS notification.
+Interactive prompts are written to Terminal and spoken aloud. Choices can be repeated by typing `r`, and completion is announced with speech and a macOS notification.
+
+The non-interactive mode avoids prompts entirely and is suitable for scripts, shortcuts, and repeatable automated workflows.
 
 The interface avoids requiring mouse interaction and keeps important progress and error information available as Terminal text.
 
@@ -165,25 +177,17 @@ Settings are written atomically, damaged settings files are preserved for inspec
 ## Current limitations
 
 - Audiobook Maker is macOS-only.
-
 - It does not remove or bypass DRM.
-
 - PDF chapter detection depends on the structure and quality of extracted text.
-
 - Scanned image-only PDFs require OCR before conversion.
-
 - Unusually structured books may need manual chapter or front-matter decisions.
-
 - Speech generation depends on voices supplied by macOS.
 
 ## Documentation
 
 - [Development and contribution guidance](CONTRIBUTING.md)
-
 - [Release history](CHANGELOG.md)
-
 - [Licence](LICENSE)
-
 - [Bugs and feature requests](https://github.com/sitinox/audiobook-maker/issues)
 
 ## Licence

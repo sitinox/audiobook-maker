@@ -113,3 +113,22 @@ Keep pull requests focused and describe:
 - any effect on accessibility, file safety, or compatibility.
 
 By contributing, you agree that your contribution may be distributed under the project's GPL-3.0-or-later licence.
+
+## Release process
+
+Public releases use semantic versioning.
+
+Before creating a release:
+
+1. Update `audiobook_maker.__version__`.
+2. Update both `CHANGELOG.md` files.
+3. Update installer version references and installer tests.
+4. Confirm README installation and usage instructions match the released CLI.
+5. Run Ruff, the formatting check, the complete test suite, shell syntax checks, and package builds.
+6. Confirm CI passes on macOS with Python 3.9 through 3.14.
+7. Create an annotated Git tag matching the package version, such as `v1.0.0`.
+8. Create the GitHub release from that tag.
+9. Attach `Install Audiobook Maker.command` and `Uninstall Audiobook Maker.command` as release assets.
+10. Rehearse installation from the published release asset rather than from a local checkout.
+
+A release should not be published if the installer verifies a different version from the tag or package metadata.
