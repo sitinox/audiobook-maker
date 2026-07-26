@@ -646,128 +646,66 @@ def find_epub_cover_art(
     return _companion_cover_art(source_path)
 
 
-def _extract_epub_multi_anchor_structure(
-    book: Any,
-) -> Optional[tuple[str, list[str]]]:
-    """
+EPUB_STRUCTURED_START = "<<<AUDIOBOOK_STRUCTURED_CHAPTER_START>>>"
+EPUB_STRUCTURED_BODY = "<<<AUDIOBOOK_STRUCTURED_CHAPTER_BODY>>>"
+EPUB_STRUCTURED_END = "<<<AUDIOBOOK_STRUCTURED_CHAPTER_END>>>"
 
-    Use EPUB TOC anchors as chapter boundaries when several real
+EPUB_MAJOR_TITLE_PATTERN = re.compile(
+    r"^(?:"
+    r"(?:chapter|part|book|stave)\s+"
+    r"(?:[IVXLCDM]+|\d+|"
+    r"one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|"
+    r"seventeen|eighteen|nineteen|twenty)\b"
+    r"|"
+    r"[IVXLCDM]+\.\s+\S+"
+    r")",
+    re.I,
+)
 
-    chapters live inside one or more XHTML spine documents.
 
-    Returns None unless the structure is strong enough to trust.
+def _clean_epub_anchor_title(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
 
-    """
 
-    import re
+def _is_epub_major_title(title: str) -> bool:
+    return bool(EPUB_MAJOR_TITLE_PATTERN.match(_clean_epub_anchor_title(title)))
 
-    from bs4 import BeautifulSoup
 
-    STRUCTURED_START = "<<<AUDIOBOOK_STRUCTURED_CHAPTER_START>>>"
+def _flatten_epub_toc(items: Any) -> list[tuple[str, str]]:
+    flattened: list[tuple[str, str]] = []
 
-    STRUCTURED_BODY = "<<<AUDIOBOOK_STRUCTURED_CHAPTER_BODY>>>"
-
-    STRUCTURED_END = "<<<AUDIOBOOK_STRUCTURED_CHAPTER_END>>>"
-
-    number_words = (
-        "one|two|three|four|five|six|seven|eight|nine|ten|"
-        "eleven|twelve|thirteen|fourteen|fifteen|sixteen|"
-        "seventeen|eighteen|nineteen|twenty"
-    )
-
-    major_pattern = re.compile(
-        r"^(?:"
-        r"(?:chapter|part|book|stave)\s+"
-        r"(?:[IVXLCDM]+|\d+|" + number_words + r")\b"
-        r"|"
-        r"[IVXLCDM]+\.\s+\S+"
-        r")",
-        re.I,
-    )
-
-    def clean_title(value: Any) -> str:
-
-        return re.sub(
-            r"\s+",
-            " ",
-            str(value or ""),
-        ).strip()
-
-    def is_major_title(title: str) -> bool:
-
-        return bool(major_pattern.match(clean_title(title)))
-
-    def flatten_toc(items):
-
-        flattened = []
-
-        for item in items:
-            if isinstance(item, tuple):
-                section, children = item
-
-                flattened.append(
-                    (
-                        clean_title(
-                            getattr(
-                                section,
-                                "title",
-                                "",
-                            )
-                        ),
-                        str(
-                            getattr(
-                                section,
-                                "href",
-                                "",
-                            )
-                            or ""
-                        ),
-                    )
+    for item in items:
+        if isinstance(item, tuple):
+            section, children = item
+            flattened.append(
+                (
+                    _clean_epub_anchor_title(getattr(section, "title", "")),
+                    str(getattr(section, "href", "") or ""),
                 )
-
-                flattened.extend(flatten_toc(children))
-
-            else:
-                flattened.append(
-                    (
-                        clean_title(
-                            getattr(
-                                item,
-                                "title",
-                                "",
-                            )
-                        ),
-                        str(
-                            getattr(
-                                item,
-                                "href",
-                                "",
-                            )
-                            or ""
-                        ),
-                    )
+            )
+            flattened.extend(_flatten_epub_toc(children))
+        else:
+            flattened.append(
+                (
+                    _clean_epub_anchor_title(getattr(item, "title", "")),
+                    str(getattr(item, "href", "") or ""),
                 )
+            )
 
-        return flattened
+    return flattened
 
-    toc_entries = flatten_toc(
-        getattr(
-            book,
-            "toc",
-            [],
-        )
-    )
+
+def _build_epub_anchor_chapters(book: Any) -> Optional[list[dict[str, Any]]]:
+    toc_entries = _flatten_epub_toc(getattr(book, "toc", []))
 
     if not toc_entries:
         return None
 
-    major_entries = []
+    major_entries: list[dict[str, Any]] = []
 
     for index, (title, href) in enumerate(toc_entries):
-        if not title or not href:
-            continue
-
-        if not is_major_title(title):
+        if not title or not href or not _is_epub_major_title(title):
             continue
 
         document_name, separator, fragment = href.partition("#")
@@ -779,7 +717,6 @@ def _extract_epub_multi_anchor_structure(
             {
                 "toc_index": index,
                 "label": title,
-                "href": href,
                 "document": unquote(document_name),
                 "fragment": unquote(fragment),
             }
@@ -788,116 +725,66 @@ def _extract_epub_multi_anchor_structure(
     if len(major_entries) < 3:
         return None
 
-    counts_by_document = {}
+    counts_by_document: dict[str, int] = {}
 
     for entry in major_entries:
         key = posixpath.normpath(entry["document"])
+        counts_by_document[key] = counts_by_document.get(key, 0) + 1
 
-        counts_by_document[key] = (
-            counts_by_document.get(
-                key,
-                0,
-            )
-            + 1
-        )
-
-    # Only activate this mode when multiple chapter anchors occur
-
-    # inside at least one XHTML document. One-chapter-per-document
-
-    # EPUBs continue using the existing strong structural mode.
-
-    if (
-        max(
-            counts_by_document.values(),
-            default=0,
-        )
-        < 2
-    ):
+    if max(counts_by_document.values(), default=0) < 2:
         return None
 
-    # Pair a major label with the immediately following TOC subtitle
-
-    # when that subtitle points into the same document.
-
-    chapters = []
+    chapters: list[dict[str, Any]] = []
 
     for entry in major_entries:
-        toc_index = entry["toc_index"]
-
-        title = entry["label"]
-
         subtitle = None
-
         subtitle_fragment = None
-
-        next_index = toc_index + 1
+        next_index = entry["toc_index"] + 1
 
         if next_index < len(toc_entries):
             next_title, next_href = toc_entries[next_index]
 
-            if next_title and next_href and not is_major_title(next_title):
+            if next_title and next_href and not _is_epub_major_title(next_title):
                 next_document, separator, next_fragment = next_href.partition("#")
-
                 same_document = posixpath.normpath(unquote(next_document)) == posixpath.normpath(
                     entry["document"]
                 )
-
                 obvious_nonchapter = bool(
                     re.search(
-                        r"project\s+gutenberg|"
-                        r"contents|"
-                        r"illustrations|"
-                        r"characters|"
-                        r"preface|"
-                        r"license",
+                        r"project\s+gutenberg|contents|illustrations|characters|preface|license",
                         next_title,
                         re.I,
                     )
                 )
 
                 if separator and next_fragment and same_document and not obvious_nonchapter:
-                    subtitle = clean_title(next_title)
-
+                    subtitle = _clean_epub_anchor_title(next_title)
                     subtitle_fragment = unquote(next_fragment)
 
-        combined_title = title
-
-        if subtitle:
-            combined_title = title + " - " + subtitle
+        title = entry["label"] + (" - " + subtitle if subtitle else "")
 
         chapters.append(
             {
-                "title": combined_title,
-                "label": title,
+                "title": title,
+                "label": entry["label"],
                 "subtitle": subtitle,
                 "document": entry["document"],
                 "fragment": entry["fragment"],
-                "body_fragment": (subtitle_fragment or entry["fragment"]),
+                "body_fragment": subtitle_fragment or entry["fragment"],
             }
         )
 
-    # Build ordered readable spine documents.
+    return chapters
 
-    spine_documents = []
 
-    for spine_entry in getattr(
-        book,
-        "spine",
-        [],
-    ):
-        if isinstance(
-            spine_entry,
-            (tuple, list),
-        ):
-            item_id = spine_entry[0]
+def _read_epub_anchor_spine_documents(book: Any) -> list[dict[str, str]]:
+    documents: list[dict[str, str]] = []
 
-        else:
-            item_id = spine_entry
+    for spine_entry in getattr(book, "spine", []):
+        item_id = spine_entry[0] if isinstance(spine_entry, (tuple, list)) else spine_entry
 
         try:
             item = book.get_item_with_id(item_id)
-
         except Exception:
             item = None
 
@@ -906,227 +793,161 @@ def _extract_epub_multi_anchor_structure(
 
         try:
             name = item.get_name()
-
         except Exception:
             continue
 
-        identity = (
-            str(
-                getattr(
-                    item,
-                    "id",
-                    "",
-                )
-            )
-            + " "
-            + str(name)
-        ).lower()
+        identity = f"{getattr(item, 'id', '')} {name}".lower()
 
-        # Covers/nav are not prose. Explicit Gutenberg footer/license
-
-        # documents must never enter the chapter stream.
-
-        if (
-            "coverpage" in identity
-            or "toc.xhtml" in identity
-            or "pg-footer" in identity
-            or "gutenberg-license" in identity
+        if any(
+            token in identity
+            for token in [
+                "coverpage",
+                "toc.xhtml",
+                "pg-footer",
+                "gutenberg-license",
+            ]
         ):
             continue
 
         try:
-            raw = item.get_content().decode(
-                "utf-8",
-                errors="replace",
-            )
-
+            raw = item.get_content().decode("utf-8", errors="replace")
         except AttributeError:
             try:
-                raw = str(
-                    item.get_content(),
-                    "utf-8",
-                    errors="replace",
-                )
-
+                raw = str(item.get_content(), "utf-8", errors="replace")
             except Exception:
                 continue
 
-        spine_documents.append(
+        documents.append(
             {
                 "name": posixpath.normpath(str(name)),
                 "raw": raw,
             }
         )
 
-    if not spine_documents:
+    return documents
+
+
+def _epub_document_matches(spine_name: str, toc_name: str) -> bool:
+    spine_norm = posixpath.normpath(spine_name)
+    toc_norm = posixpath.normpath(toc_name)
+
+    return spine_norm == toc_norm or posixpath.basename(spine_norm) == posixpath.basename(toc_norm)
+
+
+def _find_epub_fragment_position(raw: str, fragment: str) -> Optional[int]:
+    pattern = re.compile(
+        r"""\bid\s*=\s*["']""" + re.escape(fragment) + r"""["']""",
+        re.I,
+    )
+    match = pattern.search(raw)
+
+    if not match:
         return None
 
-    def document_matches(
-        spine_name: str,
-        toc_name: str,
-    ) -> bool:
+    tag_start = raw.rfind("<", 0, match.start())
+    return tag_start if tag_start >= 0 else match.start()
 
-        spine_norm = posixpath.normpath(spine_name)
 
-        toc_norm = posixpath.normpath(toc_name)
-
-        return spine_norm == toc_norm or posixpath.basename(spine_norm) == posixpath.basename(
-            toc_norm
-        )
-
-    def find_fragment_position(
-        raw: str,
-        fragment: str,
-    ) -> Optional[int]:
-
-        escaped = re.escape(fragment)
-
-        pattern = re.compile(
-            r"""\bid\s*=\s*["']""" + escaped + r"""["']""",
-            re.I,
-        )
-
-        match = pattern.search(raw)
-
-        if not match:
-            return None
-
-        # Start at the opening tag that owns the ID.
-
-        tag_start = raw.rfind(
-            "<",
-            0,
-            match.start(),
-        )
-
-        return tag_start if tag_start >= 0 else match.start()
-
-    located = []
+def _locate_epub_anchor_chapters(
+    chapters: list[dict[str, Any]],
+    spine_documents: list[dict[str, str]],
+) -> Optional[list[dict[str, Any]]]:
+    located: list[dict[str, Any]] = []
 
     for chapter in chapters:
-        found = None
-
         for document_index, document in enumerate(spine_documents):
-            if not document_matches(
-                document["name"],
-                chapter["document"],
-            ):
+            if not _epub_document_matches(document["name"], chapter["document"]):
                 continue
 
-            position = find_fragment_position(
-                document["raw"],
-                chapter["fragment"],
-            )
+            position = _find_epub_fragment_position(document["raw"], chapter["fragment"])
 
             if position is None:
                 continue
 
-            body_position = find_fragment_position(
+            body_position = _find_epub_fragment_position(
                 document["raw"],
                 chapter["body_fragment"],
             )
 
-            if body_position is None:
-                body_position = position
-
-            found = {
-                **chapter,
-                "document_index": (document_index),
-                "position": position,
-                "body_position": (body_position),
-            }
-
+            located.append(
+                {
+                    **chapter,
+                    "document_index": document_index,
+                    "position": position,
+                    "body_position": body_position if body_position is not None else position,
+                }
+            )
             break
 
-        if found:
-            located.append(found)
-
-    if len(located) < 3:
+    if len(located) < 3 or len(located) / len(chapters) < 0.75:
         return None
 
-    # Require most detected chapter labels to resolve to real anchors.
+    located.sort(key=lambda item: (item["document_index"], item["position"]))
+    return located
 
-    if len(located) / len(chapters) < 0.75:
-        return None
 
-    located.sort(
-        key=lambda item: (
-            item["document_index"],
-            item["position"],
-        )
-    )
+def _epub_anchor_html_to_text(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
 
-    def html_to_text(
-        html: str,
-    ) -> str:
+    for unwanted in soup(["script", "style"]):
+        unwanted.decompose()
 
-        soup = BeautifulSoup(
-            html,
-            "html.parser",
-        )
+    text = soup.get_text("\n", strip=True)
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
-        for unwanted in soup(
-            [
-                "script",
-                "style",
-            ]
-        ):
-            unwanted.decompose()
 
-        text = soup.get_text(
-            "\n",
-            strip=True,
-        )
+def _slice_epub_spine_stream(
+    spine_documents: list[dict[str, str]],
+    start_doc: int,
+    start_pos: int,
+    end_doc: int,
+    end_pos: int,
+) -> str:
+    if start_doc == end_doc:
+        return spine_documents[start_doc]["raw"][start_pos:end_pos]
 
-        lines = [
-            re.sub(
-                r"\s+",
-                " ",
-                line,
-            ).strip()
-            for line in text.splitlines()
-        ]
+    pieces = [spine_documents[start_doc]["raw"][start_pos:]]
 
-        return "\n".join(line for line in lines if line)
+    for document_index in range(start_doc + 1, end_doc):
+        pieces.append(spine_documents[document_index]["raw"])
 
-    def stream_slice(
-        start_doc: int,
-        start_pos: int,
-        end_doc: int,
-        end_pos: int,
-    ) -> str:
+    pieces.append(spine_documents[end_doc]["raw"][:end_pos])
+    return "\n".join(pieces)
 
-        pieces = []
 
-        if start_doc == end_doc:
-            return spine_documents[start_doc]["raw"][start_pos:end_pos]
+def _clean_epub_anchor_body(chapter: dict[str, Any], body_text: str) -> str:
+    removable = {_clean_epub_anchor_title(chapter["label"]).casefold()}
 
-        pieces.append(spine_documents[start_doc]["raw"][start_pos:])
+    if chapter["subtitle"]:
+        removable.add(_clean_epub_anchor_title(chapter["subtitle"]).casefold())
 
-        for document_index in range(
-            start_doc + 1,
-            end_doc,
-        ):
-            pieces.append(spine_documents[document_index]["raw"])
+    cleaned_lines = []
 
-        pieces.append(spine_documents[end_doc]["raw"][:end_pos])
+    for line_index, line in enumerate(body_text.splitlines()):
+        normalised = _clean_epub_anchor_title(line).casefold()
 
-        return "\n".join(pieces)
+        if line_index < 8 and normalised in removable:
+            continue
 
-    # Preserve everything before the first real chapter as normal text.
+        cleaned_lines.append(line)
 
+    return "\n".join(cleaned_lines).strip()
+
+
+def _render_epub_anchor_structure(
+    located: list[dict[str, Any]],
+    spine_documents: list[dict[str, str]],
+) -> str:
     first = located[0]
-
-    front_html = stream_slice(
+    front_html = _slice_epub_spine_stream(
+        spine_documents,
         0,
         0,
         first["document_index"],
         first["position"],
     )
-
-    front_text = html_to_text(front_html)
-
-    # Strip Gutenberg machine boilerplate before the actual ebook start.
+    front_text = _epub_anchor_html_to_text(front_html)
 
     start_marker = re.search(
         r"\*{3}\s*START OF THE PROJECT GUTENBERG EBOOK.*?\*{3}",
@@ -1137,81 +958,74 @@ def _extract_epub_multi_anchor_structure(
     if start_marker:
         front_text = front_text[start_marker.end() :].strip()
 
-    output_parts = []
-
-    if front_text:
-        output_parts.append(front_text)
+    output_parts = [front_text] if front_text else []
 
     for index, chapter in enumerate(located):
         start_doc = chapter["document_index"]
-
         start_pos = chapter["body_position"]
 
         if index + 1 < len(located):
             next_chapter = located[index + 1]
-
             end_doc = next_chapter["document_index"]
-
             end_pos = next_chapter["position"]
-
         else:
             end_doc = len(spine_documents) - 1
-
             end_pos = len(spine_documents[end_doc]["raw"])
 
-        chapter_html = stream_slice(
+        chapter_html = _slice_epub_spine_stream(
+            spine_documents,
             start_doc,
             start_pos,
             end_doc,
             end_pos,
         )
-
-        body_text = html_to_text(chapter_html)
-
-        # The structural marker supplies the spoken heading, so remove
-
-        # duplicate heading lines from the beginning of the body.
-
-        body_lines = body_text.splitlines()
-
-        removable = {
-            clean_title(chapter["label"]).casefold(),
-        }
-
-        if chapter["subtitle"]:
-            removable.add(clean_title(chapter["subtitle"]).casefold())
-
-        cleaned_lines = []
-
-        for line_index, line in enumerate(body_lines):
-            normalised = clean_title(line).casefold()
-
-            if line_index < 8 and normalised in removable:
-                continue
-
-            cleaned_lines.append(line)
-
-        body_text = "\n".join(cleaned_lines).strip()
+        body_text = _clean_epub_anchor_body(
+            chapter,
+            _epub_anchor_html_to_text(chapter_html),
+        )
 
         output_parts.extend(
             [
-                STRUCTURED_START,
+                EPUB_STRUCTURED_START,
                 chapter["title"],
-                STRUCTURED_BODY,
+                EPUB_STRUCTURED_BODY,
                 body_text,
-                STRUCTURED_END,
+                EPUB_STRUCTURED_END,
             ]
         )
 
-    text = "\n\n".join(part for part in output_parts if part).strip()
+    return "\n\n".join(part for part in output_parts if part).strip()
+
+
+def _extract_epub_multi_anchor_structure(
+    book: Any,
+) -> Optional[tuple[str, list[str]]]:
+    """Use reliable TOC anchors as chapter boundaries across EPUB spine documents."""
+
+    chapters = _build_epub_anchor_chapters(book)
+
+    if not chapters:
+        return None
+
+    spine_documents = _read_epub_anchor_spine_documents(book)
+
+    if not spine_documents:
+        return None
+
+    located = _locate_epub_anchor_chapters(chapters, spine_documents)
+
+    if not located:
+        return None
+
+    text = _render_epub_anchor_structure(located, spine_documents)
 
     if not text:
         return None
 
     details = [
         "EPUB chapter detection: TOC anchor structural mode",
-        ("EPUB structurally identified chapters: " + str(len(located))),
-        ("EPUB document items read: " + str(len(spine_documents))),
+        f"EPUB structurally identified chapters: {len(located)}",
+        f"EPUB document items read: {len(spine_documents)}",
         "EPUB navigation/contents items skipped: structural TOC boundaries used",
         "EPUB extraction method: multi-document TOC anchor stream",
     ]
