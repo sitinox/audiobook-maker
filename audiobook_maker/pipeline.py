@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+from contextlib import nullcontext
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
@@ -68,6 +69,52 @@ def _write_cover_art_to_temp(
     return cover_path
 
 
+
+def _publish_mp3_directory(
+
+    staged_dir: Path,
+
+    output_dir: Path,
+
+) -> None:
+
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    backup_dir = Path(
+
+        tempfile.mkdtemp(
+
+            prefix=f".{output_dir.name}.backup-",
+
+            dir=output_dir.parent,
+
+        )
+
+    )
+
+    backup_dir.rmdir()
+
+    had_existing_output = output_dir.exists()
+
+    if had_existing_output:
+
+        os.replace(output_dir, backup_dir)
+
+    try:
+
+        os.replace(staged_dir, output_dir)
+
+    except Exception:
+
+        if had_existing_output and backup_dir.exists():
+
+            os.replace(backup_dir, output_dir)
+
+        raise
+
+    if backup_dir.exists():
+
+        shutil.rmtree(backup_dir)
 
 def _output_directories(
 
@@ -435,13 +482,45 @@ def process_source(
 
     m4b_result = None
 
-    with tempfile.TemporaryDirectory(
+    mp3_staging_context = (
 
-        prefix="audiobook_maker_"
+        tempfile.TemporaryDirectory(
 
-    ) as temp:
+            prefix=f".{mp3_output_dir.name}.staging-",
+
+            dir=mp3_output_dir.parent,
+
+        )
+
+        if mp3_output_dir is not None
+
+        else nullcontext(None)
+
+    )
+
+    with (
+
+        tempfile.TemporaryDirectory(
+
+            prefix="audiobook_maker_"
+
+        ) as temp,
+
+        mp3_staging_context as mp3_staging,
+
+    ):
 
         temp_dir = Path(temp)
+
+        mp3_staging_dir = (
+
+            Path(mp3_staging)
+
+            if mp3_staging is not None
+
+            else None
+
+        )
 
         m4b_chapters: list[M4BChapter] = []
 
@@ -527,11 +606,29 @@ def process_source(
 
                 )
 
+                existing_mp3_file = None
+
             else:
+
+                if mp3_staging_dir is None:
+
+                    raise RuntimeError(
+
+                        "MP3 staging directory was not prepared."
+
+                    )
+
+                existing_mp3_file = (
+
+                    mp3_output_dir
+
+                    / mp3_filename
+
+                )
 
                 mp3_file = (
 
-                    mp3_output_dir
+                    mp3_staging_dir
 
                     / mp3_filename
 
@@ -555,19 +652,15 @@ def process_source(
 
             can_skip_existing = (
 
-                mp3_output_dir is not None
+                existing_mp3_file is not None
 
-                and mp3_file.exists()
+                and existing_mp3_file.exists()
 
                 and not force
 
             )
 
             working_mp3 = mp3_file
-
-            if mp3_output_dir is not None:
-
-                working_mp3 = temp_dir / f"staged-{index:04d}.mp3"
 
             if can_skip_existing:
 
@@ -581,7 +674,7 @@ def process_source(
 
                 )
 
-                shutil.copy2(mp3_file, working_mp3)
+                shutil.copy2(existing_mp3_file, working_mp3)
 
                 report.append(
 
@@ -650,10 +743,6 @@ def process_source(
                 working_mp3
 
             )
-
-            if mp3_output_dir is not None:
-
-                os.replace(working_mp3, mp3_file)
 
             actual_seconds += duration
 
@@ -770,6 +859,24 @@ def process_source(
                 "M4B cover art embedded: "
 
                 f"{'yes' if m4b_result.has_cover_art else 'no'}"
+
+            )
+
+        if mp3_output_dir is not None:
+
+            if mp3_staging_dir is None:
+
+                raise RuntimeError(
+
+                    "MP3 staging directory was not prepared."
+
+                )
+
+            _publish_mp3_directory(
+
+                mp3_staging_dir,
+
+                mp3_output_dir,
 
             )
 

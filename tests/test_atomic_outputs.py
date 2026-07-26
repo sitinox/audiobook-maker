@@ -4,6 +4,7 @@ import pytest
 
 import audiobook_maker.audio as audio
 import audiobook_maker.m4b as m4b
+import audiobook_maker.pipeline as pipeline
 
 
 def test_audio_duration_failure_is_not_silently_zero(tmp_path, monkeypatch):
@@ -77,3 +78,144 @@ def test_m4b_is_replaced_only_after_verification(tmp_path, monkeypatch):
 
     assert output.read_bytes() == b"new-complete"
     assert result.output_path == output
+
+
+def test_later_chapter_failure_leaves_previous_mp3_audiobook_unchanged(
+
+    tmp_path,
+
+):
+
+    output = tmp_path / "Book"
+
+    output.mkdir()
+
+    (output / "old-one.mp3").write_bytes(b"old-one")
+
+    (output / "old-two.mp3").write_bytes(b"old-two")
+
+    staging = tmp_path / ".Book.staging"
+
+    staging.mkdir()
+
+    with pytest.raises(RuntimeError, match="chapter two failed"):
+
+        (staging / "new-one.mp3").write_bytes(b"new-one")
+
+        raise RuntimeError("chapter two failed")
+
+    assert {
+
+        item.name: item.read_bytes()
+
+        for item in output.iterdir()
+
+    } == {
+
+        "old-one.mp3": b"old-one",
+
+        "old-two.mp3": b"old-two",
+
+    }
+
+    assert (staging / "new-one.mp3").read_bytes() == b"new-one"
+
+def test_successful_mp3_publication_replaces_complete_audiobook(
+
+    tmp_path,
+
+):
+
+    output = tmp_path / "Book"
+
+    output.mkdir()
+
+    (output / "old-one.mp3").write_bytes(b"old-one")
+
+    (output / "obsolete-three.mp3").write_bytes(b"obsolete")
+
+    staging = tmp_path / ".Book.staging"
+
+    staging.mkdir()
+
+    (staging / "new-one.mp3").write_bytes(b"new-one")
+
+    (staging / "new-two.mp3").write_bytes(b"new-two")
+
+    pipeline._publish_mp3_directory(staging, output)
+
+    assert {
+
+        path.name: path.read_bytes()
+
+        for path in output.iterdir()
+
+    } == {
+
+        "new-one.mp3": b"new-one",
+
+        "new-two.mp3": b"new-two",
+
+    }
+
+    assert not staging.exists()
+
+def test_mp3_publication_failure_restores_previous_audiobook(
+
+    tmp_path,
+
+    monkeypatch,
+
+):
+
+    output = tmp_path / "Book"
+
+    output.mkdir()
+
+    (output / "old.mp3").write_bytes(b"old")
+
+    staging = tmp_path / ".Book.staging"
+
+    staging.mkdir()
+
+    (staging / "new.mp3").write_bytes(b"new")
+
+    real_replace = pipeline.os.replace
+
+    replace_calls = 0
+
+    def fail_when_publishing(source, destination):
+
+        nonlocal replace_calls
+
+        replace_calls += 1
+
+        if replace_calls == 2:
+
+            raise OSError("simulated publication failure")
+
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(
+
+        pipeline.os,
+
+        "replace",
+
+        fail_when_publishing,
+
+    )
+
+    with pytest.raises(
+
+        OSError,
+
+        match="simulated publication failure",
+
+    ):
+
+        pipeline._publish_mp3_directory(staging, output)
+
+    assert (output / "old.mp3").read_bytes() == b"old"
+
+    assert not (output / "new.mp3").exists()
