@@ -14,7 +14,7 @@ from .settings import (
 )
 from .files import find_supported_sources, handle_successful_original
 from .notifications import notify_run_complete
-from .pipeline import process_source
+from .pipeline import ConversionOutcome, process_source
 
 def speech_rate(value: str) -> int:
     try:
@@ -172,8 +172,13 @@ def main() -> int:
         say("")
         say(f"Source {index} of {len(sources)}")
         try:
-            ok = process_source(source, settings, run_authors, args.force)
-            if ok:
+            outcome = process_source(
+                source,
+                settings,
+                run_authors,
+                args.force,
+            )
+            if outcome is ConversionOutcome.COMPLETED:
                 action = run_original_action
                 if run_original_action == "ask":
                     action, apply_to_remaining = choose_book_original_action(source.name)

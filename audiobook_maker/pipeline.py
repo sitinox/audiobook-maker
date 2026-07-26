@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 from datetime import datetime
+from enum import Enum, auto
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +26,14 @@ from .audio import (
 )
 from .files import unique_filename, write_report
 from .m4b import M4BChapter, create_m4b
+
+class ConversionOutcome(Enum):
+
+    COMPLETED = auto()
+
+    CANCELLED = auto()
+
+    FAILED = auto()
 
 def _write_cover_art_to_temp(
 
@@ -92,7 +101,7 @@ def process_source(
 
     force: bool,
 
-) -> bool:
+) -> ConversionOutcome:
 
     raw_guess_title = pretty_title_from_filename(source_path)
 
@@ -278,7 +287,7 @@ def process_source(
 
             say(f"Skipped: {title}")
 
-            return True
+            return ConversionOutcome.CANCELLED
 
         say("Please type yes, stop, or r.")
 
@@ -830,5 +839,5 @@ def process_source(
 
     say(f"Done: {title}")
 
-    return True
+    return ConversionOutcome.COMPLETED
 
