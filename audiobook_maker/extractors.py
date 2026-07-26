@@ -1219,116 +1219,48 @@ def _extract_epub_multi_anchor_structure(
     return text, details
 
 
-def extract_epub_text(source_path: Path, output_text_path: Path) -> ExtractedSource:
+def _build_epub_toc_map(book: Any) -> dict[str, list[str]]:
+    """Map each EPUB document name to its cleaned navigation titles."""
 
-    if ebook_epub is None:
-        raise RuntimeError(
-            "EPUB support needs ebooklib. "
-            "Install it with: python3 -m pip install ebooklib beautifulsoup4"
-        )
+    toc_by_document: dict[str, list[str]] = {}
 
-    if BeautifulSoup is None:
-        raise RuntimeError(
-            "EPUB support needs beautifulsoup4. "
-            "Install it with: python3 -m pip install ebooklib beautifulsoup4"
-        )
-
-    book = ebook_epub.read_epub(str(source_path))
-
-    metadata_title = epub_metadata_value(book, "DC", "title")
-
-    metadata_author = epub_metadata_value(book, "DC", "creator")
-
-    cover_art = find_epub_cover_art(source_path, book)
-
-    details = [
-        f"EPUB metadata title found: {'yes' if metadata_title else 'no'}",
-        f"EPUB metadata author found: {'yes' if metadata_author else 'no'}",
-        f"EPUB cover art found: {'yes' if cover_art else 'no'}",
-    ]
-
-    multi_anchor_result = _extract_epub_multi_anchor_structure(book)
-
-    if multi_anchor_result:
-        structured_text, structural_details = multi_anchor_result
-
-        details.extend(structural_details)
-
-        return ExtractedSource(
-            structured_text,
-            "EPUB",
-            metadata_title,
-            metadata_author,
-            cover_art,
-            details,
-        )
-
-    # ---------------------------------------------------------------
-
-    # Build a proper map of EPUB navigation entries.
-
-    #
-
-    # We keep every title associated with each XHTML document because:
-
-    #
-
-    # one TOC entry -> one spine document
-
-    #     Very strong evidence that the document itself is one chapter.
-
-    #
-
-    # several TOC entries -> one spine document
-
-    #     The document probably contains several chapters internally,
-
-    #     so we must fall back to heading-based splitting.
-
-    # ---------------------------------------------------------------
-
-    toc_by_document = {}
-
-    def walk_toc(entries):
-
+    def walk_toc(entries: Any) -> None:
         for entry in entries:
             if isinstance(entry, (tuple, list)):
                 walk_toc(entry)
-
                 continue
 
             href = getattr(entry, "href", None)
-
             title = getattr(entry, "title", None)
 
-            if href and title:
-                document = href.split("#", 1)[0]
+            if not href or not title:
+                continue
 
-                cleaned_title = re.sub(
-                    r"\s+",
-                    " ",
-                    str(title),
-                ).strip()
+            document = href.split("#", 1)[0]
+            cleaned_title = re.sub(r"\s+", " ", str(title)).strip()
 
-                if cleaned_title:
-                    toc_by_document.setdefault(
-                        document,
-                        [],
-                    ).append(cleaned_title)
+            if cleaned_title:
+                toc_by_document.setdefault(document, []).append(cleaned_title)
 
     try:
         walk_toc(book.toc)
-
     except Exception:
         pass
 
-    documents = []
+    return toc_by_document
 
+
+def _read_epub_spine_documents(
+    book: Any,
+    toc_by_document: dict[str, list[str]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Extract readable XHTML spine documents and classify obvious non-chapters."""
+
+    documents: list[dict[str, Any]] = []
     nav_items_skipped = 0
 
     for spine_entry in getattr(book, "spine", []):
         idref = spine_entry[0] if isinstance(spine_entry, (tuple, list)) else spine_entry
-
         item = book.get_item_with_id(idref)
 
         if item is None:
@@ -1337,73 +1269,44 @@ def extract_epub_text(source_path: Path, output_text_path: Path) -> ExtractedSou
         try:
             if item.get_type() != ITEM_DOCUMENT:
                 continue
-
         except Exception:
             continue
 
-        soup = BeautifulSoup(
-            item.get_content(),
-            "html.parser",
-        )
+        soup = BeautifulSoup(item.get_content(), "html.parser")
 
         for unwanted in soup(["script", "style", "nav"]):
             unwanted.decompose()
 
         try:
             name = item.get_name()
-
         except Exception:
             name = ""
 
         item_id = str(getattr(item, "id", ""))
-
-        raw_text = soup.get_text(
-            "\n",
-            strip=True,
-        )
-
+        raw_text = soup.get_text("\n", strip=True)
         lines = [
             re.sub(r"\s+", " ", line).strip() for line in raw_text.splitlines() if line.strip()
         ]
-
         text = "\n".join(lines).strip()
 
         if not text:
             continue
 
-        # Navigation-only resources are still discarded.
-
         if epub_is_nav_or_toc(item, text):
             nav_items_skipped += 1
-
             continue
 
         headings = []
 
         for tag_name in ["h1", "h2", "h3"]:
             for tag in soup.find_all(tag_name):
-                value = re.sub(
-                    r"\s+",
-                    " ",
-                    tag.get_text(
-                        " ",
-                        strip=True,
-                    ),
-                ).strip()
+                value = re.sub(r"\s+", " ", tag.get_text(" ", strip=True)).strip()
 
                 if value:
                     headings.append(value)
 
-        toc_titles = toc_by_document.get(
-            name,
-            [],
-        )
-
         html_heading = choose_best_epub_heading(headings)
-
-        word_total = len(text.split())
-
-        combined_identity = (f"{item_id} {name}").lower()
+        combined_identity = f"{item_id} {name}".lower()
 
         obvious_nonchapter = any(
             token in combined_identity
@@ -1419,7 +1322,7 @@ def extract_epub_text(source_path: Path, output_text_path: Path) -> ExtractedSou
             ]
         )
 
-        heading_sample = (" ".join(headings[:3])).lower()
+        heading_sample = " ".join(headings[:3]).lower()
 
         if any(
             phrase in heading_sample
@@ -1437,124 +1340,80 @@ def extract_epub_text(source_path: Path, output_text_path: Path) -> ExtractedSou
                 "name": name,
                 "id": item_id,
                 "text": text,
-                "words": word_total,
-                "toc_titles": toc_titles,
+                "words": len(text.split()),
+                "toc_titles": toc_by_document.get(name, []),
                 "html_heading": html_heading,
                 "obvious_nonchapter": obvious_nonchapter,
             }
         )
 
-    # ---------------------------------------------------------------
+    return documents, nav_items_skipped
 
-    # Decide whether this EPUB has strong one-document-per-chapter
 
-    # structure.
+def _strong_epub_chapter_documents(
+    documents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return documents that strongly represent one complete chapter each."""
 
-    #
-
-    # A document qualifies strongly when:
-
-    # - it contains meaningful body text;
-
-    # - it is not obvious front/back matter;
-
-    # - exactly one TOC entry points to that document.
-
-    #
-
-    # We only activate this mode when at least three such documents exist
-
-    # and they represent most of the meaningful book text.
-
-    # ---------------------------------------------------------------
-
-    strong_documents = []
-
-    for document in documents:
-        if document["obvious_nonchapter"]:
-            continue
-
-        if document["words"] < 80:
-            continue
-
-        if len(document["toc_titles"]) == 1:
-            strong_documents.append(document)
+    strong_documents = [
+        document
+        for document in documents
+        if not document["obvious_nonchapter"]
+        and document["words"] >= 80
+        and len(document["toc_titles"]) == 1
+    ]
 
     meaningful_words = sum(
         document["words"] for document in documents if not document["obvious_nonchapter"]
     )
-
     strong_words = sum(document["words"] for document in strong_documents)
 
-    structured_mode = (
+    if (
         len(strong_documents) >= 3
         and meaningful_words > 0
         and strong_words / meaningful_words >= 0.60
-    )
+    ):
+        return strong_documents
 
-    parts = []
+    return []
 
-    if structured_mode:
+
+def _render_epub_spine_text(
+    documents: list[dict[str, Any]],
+    strong_documents: list[dict[str, Any]],
+) -> tuple[str, list[str]]:
+    """Render either structured chapter markers or heading-fallback spine text."""
+
+    parts: list[str] = []
+    details: list[str] = []
+
+    if strong_documents:
         strong_ids = {id(document) for document in strong_documents}
-
         first_strong_seen = False
 
         for document in documents:
             if id(document) not in strong_ids:
-                # Material before the first real chapter remains ordinary
-
-                # text so the existing front-matter reviewer can ask the user
-
-                # about it individually.
-
-                #
-
-                # Material after the chapter sequence is deliberately omitted
-
-                # from the chapter stream rather than becoming a bogus final
-
-                # audiobook chapter.
-
                 if not first_strong_seen:
                     parts.append(document["text"])
-
                 continue
 
             first_strong_seen = True
-
             heading = document["toc_titles"][0] or document["html_heading"] or "Untitled Chapter"
+            heading = re.sub(r"\s+", " ", heading).strip()
 
-            heading = re.sub(
-                r"\s+",
-                " ",
-                heading,
-            ).strip()
-
-            parts.append("<<<AUDIOBOOK_STRUCTURED_CHAPTER_START>>>")
-
-            parts.append(heading)
-
-            parts.append("<<<AUDIOBOOK_STRUCTURED_CHAPTER_BODY>>>")
-
-            parts.append(document["text"])
-
-            parts.append("<<<AUDIOBOOK_STRUCTURED_CHAPTER_END>>>")
+            parts.extend(
+                [
+                    "<<<AUDIOBOOK_STRUCTURED_CHAPTER_START>>>",
+                    heading,
+                    "<<<AUDIOBOOK_STRUCTURED_CHAPTER_BODY>>>",
+                    document["text"],
+                    "<<<AUDIOBOOK_STRUCTURED_CHAPTER_END>>>",
+                ]
+            )
 
         details.append("EPUB chapter detection: strong structural mode")
-
         details.append(f"EPUB structurally identified chapters: {len(strong_documents)}")
-
     else:
-        # No trustworthy one-document-per-chapter structure.
-
-        #
-
-        # Preserve the full spine text and allow the general heading parser
-
-        # to split it. This covers EPUBs where many chapters live inside one
-
-        # XHTML file, such as some editions of A Christmas Carol.
-
         for document in documents:
             heading = document["html_heading"]
 
@@ -1565,18 +1424,65 @@ def extract_epub_text(source_path: Path, output_text_path: Path) -> ExtractedSou
 
         details.append("EPUB chapter detection: heading fallback mode")
 
+    return "\n\n".join(parts), details
+
+
+def extract_epub_text(source_path: Path, output_text_path: Path) -> ExtractedSource:
+    if ebook_epub is None:
+        raise RuntimeError(
+            "EPUB support needs ebooklib. "
+            "Install it with: python3 -m pip install ebooklib beautifulsoup4"
+        )
+
+    if BeautifulSoup is None:
+        raise RuntimeError(
+            "EPUB support needs beautifulsoup4. "
+            "Install it with: python3 -m pip install ebooklib beautifulsoup4"
+        )
+
+    book = ebook_epub.read_epub(str(source_path))
+    metadata_title = epub_metadata_value(book, "DC", "title")
+    metadata_author = epub_metadata_value(book, "DC", "creator")
+    cover_art = find_epub_cover_art(source_path, book)
+
+    details = [
+        f"EPUB metadata title found: {'yes' if metadata_title else 'no'}",
+        f"EPUB metadata author found: {'yes' if metadata_author else 'no'}",
+        f"EPUB cover art found: {'yes' if cover_art else 'no'}",
+    ]
+
+    multi_anchor_result = _extract_epub_multi_anchor_structure(book)
+
+    if multi_anchor_result:
+        structured_text, structural_details = multi_anchor_result
+        details.extend(structural_details)
+
+        return ExtractedSource(
+            structured_text,
+            "EPUB",
+            metadata_title,
+            metadata_author,
+            cover_art,
+            details,
+        )
+
+    toc_by_document = _build_epub_toc_map(book)
+    documents, nav_items_skipped = _read_epub_spine_documents(
+        book,
+        toc_by_document,
+    )
+    strong_documents = _strong_epub_chapter_documents(documents)
+    text, rendering_details = _render_epub_spine_text(
+        documents,
+        strong_documents,
+    )
+
+    details.extend(rendering_details)
     details.append(f"EPUB document items read: {len(documents)}")
-
     details.append(f"EPUB navigation/contents items skipped: {nav_items_skipped}")
-
     details.append("EPUB extraction method: structured spine extraction")
 
-    text = "\n\n".join(parts)
-
-    output_text_path.write_text(
-        text,
-        encoding="utf-8",
-    )
+    output_text_path.write_text(text, encoding="utf-8")
 
     return ExtractedSource(
         clean_text(text),
