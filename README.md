@@ -1,39 +1,37 @@
 # Audiobook Maker
 
 [![CI](https://github.com/sitinox/audiobook-maker/actions/workflows/ci.yml/badge.svg)](https://github.com/sitinox/audiobook-maker/actions/workflows/ci.yml)
-
-Audiobook Maker is an accessible macOS command-line tool that converts DRM-free PDF, TXT, DOCX, and EPUB books into chapterised MP3 audiobooks, single-file M4B audiobooks, or both.
+Audiobook Maker is an accessible macOS command-line application that converts DRM-free PDF, TXT, DOCX, and EPUB books into chaptered MP3 audiobooks, single-file M4B audiobooks, or both.
 
 It is designed for keyboard and VoiceOver use.
 
-## Features
+## Terminal preview
 
-- Converts PDF, TXT, DOCX, and EPUB sources.
-- Creates separately tagged MP3 chapters, one chapterised M4B, or both.
+![Audiobook Maker running in macOS Terminal, showing version 1.0.0, the configured project folder, one EPUB source book, and output-format choices.](docs/terminal-demo.svg)
+
+## Main features
+
+- Converts PDF, TXT, DOCX, and DRM-free EPUB books.
+
+- Creates separately tagged MP3 chapters, one chaptered M4B, or both.
+
 - Embeds chapters, title, author, narrator, cover art, and other metadata.
-- Reviews front matter before conversion.
-- Suggests titles and authors from filenames, extracted text, and EPUB metadata.
-- Cleans duplicated spoken EPUB headings.
+
+- Reviews front matter and suggests titles and authors before conversion.
+
+- Uses EPUB artwork, companion images, PDF first-page artwork, or suitable DOCX images when available.
+
 - Estimates audiobook duration and verifies completed audio.
+
 - Produces a conversion report for each book.
-- Provides spoken and macOS desktop completion notifications.
-- Can keep, archive, uniquely rename, or move successfully converted originals to the Bin.
-- Protects original source files unless conversion succeeds.
-- Stages MP3 and M4B output before publication so failed replacements do not overwrite an existing successful audiobook.
-- Saves settings atomically and preserves unreadable settings files for investigation.
 
-## Cover art
+- Provides spoken and macOS completion notifications.
 
-Audiobook Maker can use:
+- Lets users keep, archive, uniquely rename, or move successfully converted originals to the Bin.
 
-- cover art stored inside an EPUB;
-- a companion image with the same filename as the source book;
-- suitable artwork from the first page of a PDF;
-- a suitable early embedded image from a DOCX file.
+- Protects existing output and source books when conversion fails or is cancelled.
 
-Companion artwork takes priority over automatically detected artwork.
-
-Books without usable artwork can still be converted.
+- Lets users choose where the Audiobook Maker project folder is stored.
 
 ## Requirements
 
@@ -42,24 +40,30 @@ Audiobook Maker currently supports macOS.
 It requires:
 
 - Python 3.9 or newer;
+
 - ffmpeg and ffprobe;
-- pdftotext from Poppler;
-- the Python packages listed in `pyproject.toml`.
+
+- Poppler, including `pdftotext`;
+
+- the Python packages declared in `pyproject.toml`.
 
 Speech and desktop notifications use the built-in macOS `say` and `osascript` commands.
 
-## Installation for development
+## Installation
 
 Install the required system tools with Homebrew:
 
     brew install python ffmpeg poppler
 
-Create and activate a virtual environment:
+Install Audiobook Maker from a local checkout:
+
+    git clone https://github.com/sitinox/audiobook-maker.git
+
+    cd audiobook-maker
 
     python3 -m venv .venv
-    source .venv/bin/activate
 
-Install Audiobook Maker:
+    source .venv/bin/activate
 
     python -m pip install .
 
@@ -67,40 +71,63 @@ Run it with:
 
     audiobook
 
-For development and testing:
-
-    python -m pip install -e ".[dev]"
-    python -m pytest
-
 ## Basic use
 
-1. Put a DRM-free PDF, TXT, DOCX, or EPUB file in the configured `Books to Convert` folder.
-2. Open Terminal.
-3. Run `audiobook`.
-4. Follow the spoken and written prompts.
+1. Run `audiobook`.
+
+2. Choose or confirm the project folder when prompted.
+
+3. Put a DRM-free PDF, TXT, DOCX, or EPUB book in its `Books to Convert` folder.
+
+4. Run `audiobook` again.
+
+5. Follow the spoken and written prompts.
 
 Audiobook Maker guides you through output format, voice, speech rate, bitrate, title, author, front matter, and original-file handling.
 
-## Useful commands
+Useful commands:
 
     audiobook --help
+
     audiobook --settings
+
     audiobook --changelog
+
     audiobook --version
 
-## Output formats
+## Supported formats
 
-### MP3
+### Input
 
-Creates a folder containing separately tagged chapter MP3 files.
+- PDF
 
-### M4B
+- TXT
 
-Creates one M4B audiobook containing embedded chapter markers and metadata.
+- DOCX
 
-### Both
+- DRM-free EPUB
 
-Creates the M4B in the book folder and places the MP3 chapters in an `MP3` subfolder.
+### Output
+
+**MP3:** a folder containing separately tagged chapter files.
+
+**M4B:** one audiobook containing embedded chapter markers and metadata.
+
+**Both:** an M4B audiobook plus MP3 chapters in an `MP3` subfolder.
+
+## Cover art
+
+Audiobook Maker can use:
+
+- artwork stored inside an EPUB;
+
+- a companion image with the same filename as the source book;
+
+- suitable artwork from the first page of a PDF;
+
+- a suitable early embedded image from a DOCX file.
+
+Companion artwork takes priority over automatically detected artwork. Books without usable artwork can still be converted.
 
 ## Accessibility
 
@@ -108,64 +135,38 @@ Audiobook Maker was developed for keyboard and VoiceOver use.
 
 Prompts are written to Terminal and spoken aloud. Choices can be repeated by typing `r`, and completion is announced with speech and a macOS notification.
 
-The interface avoids requiring mouse interaction and keeps important progress and error information available as text in Terminal.
+The interface avoids requiring mouse interaction and keeps important progress and error information available as Terminal text.
 
-## Reliability and file safety
+## File safety
 
-Audiobook Maker is designed not to treat incomplete work as a successful conversion.
+Audiobook Maker stages new MP3 and M4B output before replacing existing files. Failed or cancelled conversions do not publish partial output or trigger handling of the original source book.
 
-- Original source files are only handled after conversion succeeds.
-- New MP3 and M4B output is staged before replacing an existing successful output.
-- Failed encoding, tagging, or duration verification does not publish a partial final file.
-- Temporary conversion files are cleaned up after successful and failed operations.
-- Invalid speech-rate values are rejected.
-- Settings are written atomically.
-- Damaged settings files are preserved rather than silently overwritten.
-- Missing external tools are reported with specific installation guidance.
+Settings are written atomically, damaged settings files are preserved for inspection, and temporary conversion files are cleaned after successful, failed, and cancelled operations.
 
-These safeguards reduce the risk of losing an original book or replacing a working audiobook with a failed conversion.
+## Current limitations
 
-## Tests
+- Audiobook Maker is macOS-only.
 
-The regression suite exercises the behaviour behind the public features and safety guarantees, including:
-
-- command-line version behaviour and packaging metadata;
-- TXT, DOCX, PDF, and EPUB cover-art handling;
-- companion-artwork priority;
-- M4B creation, chapter markers, metadata, and duration;
-- MP3, M4B, and combined output rules;
-- keeping, archiving, uniquely renaming, and binning originals;
-- protection of original files after failed conversion;
-- settings validation, damaged-settings recovery, and atomic writes;
-- staged MP3 and M4B replacement;
-- failure during encoding, tagging, and duration verification;
-- architectural checks that prevent wildcard imports and duplicated menu implementations from returning.
-
-Run the suite with:
-
-    python -m pytest
-
-The 1.0.0 release passes 34 automated tests.
-
-## Limitations
-
-- Audiobook Maker is currently macOS-only.
 - It does not remove or bypass DRM.
+
 - PDF chapter detection depends on the structure and quality of extracted text.
+
 - Scanned image-only PDFs require OCR before conversion.
+
 - Unusually structured books may need manual chapter or front-matter decisions.
-- Speech generation currently depends on the voices supplied by macOS.
 
-## Project status
+- Speech generation depends on voices supplied by macOS.
 
-Version 1.0.0 is the first stable public release.
+## Documentation
 
-Earlier version numbers were used only during private development. The full development history remains available through the repository commits, pull requests, and closed issues.
+- [Development and contribution guidance](CONTRIBUTING.md)
 
-## Version history
+- [Release history](CHANGELOG.md)
 
-See `CHANGELOG.md` and the GitHub Releases page.
+- [Licence](LICENSE)
+
+- [Bugs and feature requests](https://github.com/sitinox/audiobook-maker/issues)
 
 ## Licence
 
-Audiobook Maker is free software licensed under the GNU General Public License version 3 or any later version. See `LICENSE` for the full licence text.
+Audiobook Maker is free software licensed under the GNU General Public License version 3 or any later version.

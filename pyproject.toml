@@ -35,6 +35,12 @@ dependencies = [
 
 ]
 
+[project.urls]
+Homepage = "https://github.com/sitinox/audiobook-maker"
+Source = "https://github.com/sitinox/audiobook-maker"
+Issues = "https://github.com/sitinox/audiobook-maker/issues"
+Changelog = "https://github.com/sitinox/audiobook-maker/blob/main/CHANGELOG.md"
+
 [project.scripts]
 
 audiobook = "audiobook_maker.cli:main"
