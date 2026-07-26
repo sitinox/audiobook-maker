@@ -275,323 +275,359 @@ def _companion_cover_art(source_path: Path) -> Optional[tuple[str, bytes]]:
     return None
 
 
-def find_epub_cover_art(
-    source_path: Path,
-    book: Any,
-) -> Optional[tuple[str, bytes]]:
+def _epub_xml_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower()
 
-    def local_name(tag: str) -> str:
 
-        return tag.rsplit("}", 1)[-1].lower()
+def _normalise_epub_image_mime(
+    mime: Optional[str],
+    path: str,
+) -> Optional[str]:
+    value = (mime or "").lower().strip()
 
-    def normalise_mime(mime: Optional[str], path: str) -> Optional[str]:
+    if value in {"image/jpeg", "image/jpg"}:
+        return "image/jpeg"
 
-        value = (mime or "").lower().strip()
+    if value == "image/png":
+        return "image/png"
 
-        if value in {"image/jpeg", "image/jpg"}:
-            return "image/jpeg"
+    suffix = Path(path).suffix.lower()
 
-        if value == "image/png":
-            return "image/png"
+    if suffix in {".jpg", ".jpeg"}:
+        return "image/jpeg"
 
-        suffix = Path(path).suffix.lower()
+    if suffix == ".png":
+        return "image/png"
 
-        if suffix in {".jpg", ".jpeg"}:
-            return "image/jpeg"
+    return None
 
-        if suffix == ".png":
-            return "image/png"
 
-        return None
-
-    def valid_image(mime: Optional[str], data: bytes) -> bool:
-
-        if not data:
-            return False
-
-        if mime == "image/jpeg":
-            return data.startswith(b"\xff\xd8\xff")
-
-        if mime == "image/png":
-            return data.startswith(b"\x89PNG\r\n\x1a\n")
-
+def _valid_epub_image(
+    mime: Optional[str],
+    data: bytes,
+) -> bool:
+    if not data:
         return False
 
-    def read_manifest_item(
-        archive,
-        opf_directory: str,
-        item: dict,
-    ) -> Optional[tuple[str, bytes]]:
+    if mime == "image/jpeg":
+        return data.startswith(b"\xff\xd8\xff")
 
-        href = item.get("href", "").strip()
+    if mime == "image/png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n")
 
-        if not href:
-            return None
+    return False
 
-        archive_path = posixpath.normpath(
+
+def _read_epub_manifest_image(
+    archive: Any,
+    opf_directory: str,
+    item: dict[str, str],
+) -> Optional[tuple[str, bytes]]:
+    href = item.get("href", "").strip()
+
+    if not href:
+        return None
+
+    archive_path = posixpath.normpath(
+        posixpath.join(
+            opf_directory,
+            href.split("#", 1)[0],
+        )
+    )
+    mime = _normalise_epub_image_mime(
+        item.get("media-type"),
+        archive_path,
+    )
+
+    if not mime:
+        return None
+
+    try:
+        data = archive.read(archive_path)
+    except Exception:
+        return None
+
+    if not _valid_epub_image(mime, data):
+        return None
+
+    return mime, data
+
+
+def _read_epub_package(
+    archive: Any,
+) -> tuple[Any, str, dict[str, dict[str, str]], list[dict[str, str]]]:
+    container_root = ET.fromstring(archive.read("META-INF/container.xml"))
+    opf_path = None
+
+    for element in container_root.iter():
+        if _epub_xml_local_name(element.tag) != "rootfile":
+            continue
+
+        candidate = element.attrib.get("full-path")
+
+        if candidate:
+            opf_path = candidate
+            break
+
+    if not opf_path:
+        raise ValueError("EPUB package document was not found.")
+
+    opf_root = ET.fromstring(archive.read(opf_path))
+    opf_directory = posixpath.dirname(opf_path)
+    manifest: dict[str, dict[str, str]] = {}
+    manifest_items: list[dict[str, str]] = []
+
+    for element in opf_root.iter():
+        if _epub_xml_local_name(element.tag) != "item":
+            continue
+
+        item = dict(element.attrib)
+        item_id = item.get("id")
+        manifest_items.append(item)
+
+        if item_id:
+            manifest[item_id] = item
+
+    return opf_root, opf_directory, manifest, manifest_items
+
+
+def _find_epub3_cover_image(
+    archive: Any,
+    opf_directory: str,
+    manifest_items: list[dict[str, str]],
+) -> Optional[tuple[str, bytes]]:
+    for item in manifest_items:
+        properties = set(item.get("properties", "").split())
+
+        if "cover-image" not in properties:
+            continue
+
+        result = _read_epub_manifest_image(
+            archive,
+            opf_directory,
+            item,
+        )
+
+        if result:
+            return result
+
+    return None
+
+
+def _find_epub2_cover_image(
+    archive: Any,
+    opf_root: Any,
+    opf_directory: str,
+    manifest: dict[str, dict[str, str]],
+) -> Optional[tuple[str, bytes]]:
+    for element in opf_root.iter():
+        if _epub_xml_local_name(element.tag) != "meta":
+            continue
+
+        if element.attrib.get("name", "").lower() != "cover":
+            continue
+
+        cover_id = element.attrib.get("content")
+
+        if not cover_id:
+            continue
+
+        item = manifest.get(cover_id)
+
+        if not item:
+            continue
+
+        result = _read_epub_manifest_image(
+            archive,
+            opf_directory,
+            item,
+        )
+
+        if result:
+            return result
+
+    return None
+
+
+def _find_epub_guide_cover_image(
+    archive: Any,
+    opf_root: Any,
+    opf_directory: str,
+    manifest_items: list[dict[str, str]],
+) -> Optional[tuple[str, bytes]]:
+    for element in opf_root.iter():
+        if _epub_xml_local_name(element.tag) != "reference":
+            continue
+
+        if "cover" not in element.attrib.get("type", "").lower():
+            continue
+
+        href_base = element.attrib.get("href", "").split("#", 1)[0]
+
+        for item in manifest_items:
+            if item.get("href", "").split("#", 1)[0] != href_base:
+                continue
+
+            result = _read_epub_manifest_image(
+                archive,
+                opf_directory,
+                item,
+            )
+
+            if result:
+                return result
+
+    return None
+
+
+def _likely_epub_cover_wrappers(
+    manifest_items: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    wrappers = []
+
+    for item in manifest_items:
+        identity = f"{item.get('id', '')} {item.get('href', '')}".lower()
+        media_type = item.get("media-type", "").lower()
+
+        if "cover" in identity and any(token in media_type for token in ["xhtml", "html", "svg"]):
+            wrappers.append(item)
+
+    return wrappers
+
+
+def _find_epub_wrapper_cover_image(
+    archive: Any,
+    opf_directory: str,
+    manifest_items: list[dict[str, str]],
+) -> Optional[tuple[str, bytes]]:
+    for wrapper in _likely_epub_cover_wrappers(manifest_items):
+        wrapper_path = posixpath.normpath(
             posixpath.join(
                 opf_directory,
-                href.split("#", 1)[0],
+                wrapper.get("href", ""),
             )
         )
 
-        mime = normalise_mime(
-            item.get("media-type"),
-            archive_path,
+        try:
+            wrapper_root = ET.fromstring(archive.read(wrapper_path))
+        except Exception:
+            continue
+
+        wrapper_directory = posixpath.dirname(wrapper_path)
+
+        for element in wrapper_root.iter():
+            reference = (
+                element.attrib.get("src")
+                or element.attrib.get("href")
+                or element.attrib.get("{http://www.w3.org/1999/xlink}href")
+            )
+
+            if not reference:
+                continue
+
+            image_path = posixpath.normpath(
+                posixpath.join(
+                    wrapper_directory,
+                    reference.split("#", 1)[0],
+                )
+            )
+            mime = _normalise_epub_image_mime(None, image_path)
+
+            if not mime:
+                continue
+
+            try:
+                data = archive.read(image_path)
+            except Exception:
+                continue
+
+            if _valid_epub_image(mime, data):
+                return mime, data
+
+    return None
+
+
+def _find_named_epub_manifest_cover(
+    archive: Any,
+    opf_directory: str,
+    manifest_items: list[dict[str, str]],
+) -> Optional[tuple[str, bytes]]:
+    for item in manifest_items:
+        identity = f"{item.get('id', '')} {item.get('href', '')}".lower()
+
+        if "cover" not in identity:
+            continue
+
+        result = _read_epub_manifest_image(
+            archive,
+            opf_directory,
+            item,
         )
 
-        if not mime:
-            return None
+        if result:
+            return result
 
-        try:
-            data = archive.read(archive_path)
+    return None
 
-        except Exception:
-            return None
 
-        if not valid_image(mime, data):
-            return None
-
-        return mime, data
-
+def _find_epub_archive_cover(
+    source_path: Path,
+) -> Optional[tuple[str, bytes]]:
     try:
         with zipfile.ZipFile(source_path, "r") as archive:
-            container_data = archive.read("META-INF/container.xml")
+            (
+                opf_root,
+                opf_directory,
+                manifest,
+                manifest_items,
+            ) = _read_epub_package(archive)
 
-            container_root = ET.fromstring(container_data)
-
-            opf_path = None
-
-            for element in container_root.iter():
-                if local_name(element.tag) != "rootfile":
-                    continue
-
-                candidate = element.attrib.get("full-path")
-
-                if candidate:
-                    opf_path = candidate
-
-                    break
-
-            if not opf_path:
-                raise ValueError("EPUB package document was not found.")
-
-            opf_root = ET.fromstring(archive.read(opf_path))
-
-            opf_directory = posixpath.dirname(opf_path)
-
-            manifest = {}
-
-            manifest_items = []
-
-            for element in opf_root.iter():
-                if local_name(element.tag) != "item":
-                    continue
-
-                item = dict(element.attrib)
-
-                item_id = item.get("id")
-
-                manifest_items.append(item)
-
-                if item_id:
-                    manifest[item_id] = item
-
-            # EPUB 3: explicit cover-image property.
-
-            for item in manifest_items:
-                properties = set(
-                    item.get(
-                        "properties",
-                        "",
-                    ).split()
-                )
-
-                if "cover-image" not in properties:
-                    continue
-
-                result = read_manifest_item(
+            strategies = [
+                lambda: _find_epub3_cover_image(
                     archive,
                     opf_directory,
-                    item,
-                )
+                    manifest_items,
+                ),
+                lambda: _find_epub2_cover_image(
+                    archive,
+                    opf_root,
+                    opf_directory,
+                    manifest,
+                ),
+                lambda: _find_epub_guide_cover_image(
+                    archive,
+                    opf_root,
+                    opf_directory,
+                    manifest_items,
+                ),
+                lambda: _find_epub_wrapper_cover_image(
+                    archive,
+                    opf_directory,
+                    manifest_items,
+                ),
+                lambda: _find_named_epub_manifest_cover(
+                    archive,
+                    opf_directory,
+                    manifest_items,
+                ),
+            ]
+
+            for strategy in strategies:
+                result = strategy()
 
                 if result:
                     return result
-
-            # EPUB 2: <meta name="cover" content="image-id">.
-
-            for element in opf_root.iter():
-                if local_name(element.tag) != "meta":
-                    continue
-
-                if (
-                    element.attrib.get(
-                        "name",
-                        "",
-                    ).lower()
-                    != "cover"
-                ):
-                    continue
-
-                cover_id = element.attrib.get("content")
-
-                if not cover_id:
-                    continue
-
-                item = manifest.get(cover_id)
-
-                if not item:
-                    continue
-
-                result = read_manifest_item(
-                    archive,
-                    opf_directory,
-                    item,
-                )
-
-                if result:
-                    return result
-
-            # EPUB guide references can identify a cover document/image.
-
-            for element in opf_root.iter():
-                if local_name(element.tag) != "reference":
-                    continue
-
-                if (
-                    "cover"
-                    not in element.attrib.get(
-                        "type",
-                        "",
-                    ).lower()
-                ):
-                    continue
-
-                href = element.attrib.get("href", "")
-
-                href_base = href.split(
-                    "#",
-                    1,
-                )[0]
-
-                for item in manifest_items:
-                    if (
-                        item.get(
-                            "href",
-                            "",
-                        ).split("#", 1)[0]
-                        != href_base
-                    ):
-                        continue
-
-                    result = read_manifest_item(
-                        archive,
-                        opf_directory,
-                        item,
-                    )
-
-                    if result:
-                        return result
-
-            # Inspect likely cover wrapper XHTML/SVG files and follow
-
-            # their image references.
-
-            wrapper_items = []
-
-            for item in manifest_items:
-                identity = (item.get("id", "") + " " + item.get("href", "")).lower()
-
-                media_type = item.get("media-type", "").lower()
-
-                if "cover" in identity and (
-                    "xhtml" in media_type or "html" in media_type or "svg" in media_type
-                ):
-                    wrapper_items.append(item)
-
-            for wrapper in wrapper_items:
-                wrapper_href = wrapper.get("href", "")
-
-                wrapper_path = posixpath.normpath(
-                    posixpath.join(
-                        opf_directory,
-                        wrapper_href,
-                    )
-                )
-
-                try:
-                    wrapper_root = ET.fromstring(archive.read(wrapper_path))
-
-                except Exception:
-                    continue
-
-                wrapper_directory = posixpath.dirname(wrapper_path)
-
-                for element in wrapper_root.iter():
-                    reference = (
-                        element.attrib.get("src")
-                        or element.attrib.get("href")
-                        or element.attrib.get("{http://www.w3.org/1999/xlink}href")
-                    )
-
-                    if not reference:
-                        continue
-
-                    image_path = posixpath.normpath(
-                        posixpath.join(
-                            wrapper_directory,
-                            reference.split("#", 1)[0],
-                        )
-                    )
-
-                    mime = normalise_mime(
-                        None,
-                        image_path,
-                    )
-
-                    if not mime:
-                        continue
-
-                    try:
-                        data = archive.read(image_path)
-
-                    except Exception:
-                        continue
-
-                    if valid_image(
-                        mime,
-                        data,
-                    ):
-                        return mime, data
-
-            # Final EPUB-native fallback: an actual image manifest item
-
-            # whose ID or filename clearly identifies it as a cover.
-
-            for item in manifest_items:
-                identity = (item.get("id", "") + " " + item.get("href", "")).lower()
-
-                if "cover" not in identity:
-                    continue
-
-                result = read_manifest_item(
-                    archive,
-                    opf_directory,
-                    item,
-                )
-
-                if result:
-                    return result
-
     except Exception:
         pass
 
-    # EbookLib fallback for unusual EPUBs.
+    return None
 
+
+def _find_ebooklib_cover_image(
+    book: Any,
+) -> Optional[tuple[str, bytes]]:
     try:
         items = list(book.get_items())
-
     except Exception:
         items = []
 
@@ -599,19 +635,16 @@ def find_epub_cover_art(
         try:
             if item.get_type() != ITEM_IMAGE:
                 continue
-
         except Exception:
             continue
 
         try:
             name = item.get_name().lower()
-
         except Exception:
             name = ""
 
         try:
             item_id = str(item.id).lower()
-
         except Exception:
             item_id = ""
 
@@ -620,28 +653,35 @@ def find_epub_cover_art(
 
         try:
             data = item.get_content()
-
         except Exception:
             continue
 
-        mime = normalise_mime(
-            getattr(
-                item,
-                "media_type",
-                None,
-            ),
+        mime = _normalise_epub_image_mime(
+            getattr(item, "media_type", None),
             name,
         )
 
-        if mime and valid_image(
-            mime,
-            data,
-        ):
+        if mime and _valid_epub_image(mime, data):
             return mime, data
 
-    # User-supplied companion image:
+    return None
 
-    # Book.epub + Book.jpg/png.
+
+def find_epub_cover_art(
+    source_path: Path,
+    book: Any,
+) -> Optional[tuple[str, bytes]]:
+    """Find EPUB cover art in package metadata, EbookLib items, or a companion image."""
+
+    archive_cover = _find_epub_archive_cover(source_path)
+
+    if archive_cover:
+        return archive_cover
+
+    ebooklib_cover = _find_ebooklib_cover_image(book)
+
+    if ebooklib_cover:
+        return ebooklib_cover
 
     return _companion_cover_art(source_path)
 
