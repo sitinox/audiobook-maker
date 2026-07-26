@@ -1,5 +1,6 @@
 import argparse
 from importlib.resources import files
+from pathlib import Path
 
 from .audio import ID3
 from .common import (
@@ -9,6 +10,7 @@ from .common import (
     SUPPORTED_EXTENSIONS,
     VERSION,
     BeautifulSoup,
+    ConversionOptions,
     ProjectPaths,
     Settings,
     check_tool,
@@ -48,6 +50,49 @@ def parse_args() -> argparse.Namespace:
         description=f"Audiobook Maker {VERSION}. Convert PDF, TXT, DOCX, and EPUB sources into chapterised MP3, M4B, or combined audiobooks.",
         epilog="Put source files in the 'Books to Convert' folder. Supported files: .pdf, .txt, .docx, and .epub. Audiobook Maker suggests title and author, reviews front matter, creates MP3 or M4B output, embeds chapters, metadata and cover art when available, verifies durations, and saves reports.",
     )
+    source_group = parser.add_mutually_exclusive_group()
+    source_group.add_argument(
+        "--source",
+        type=Path,
+        metavar="FILE",
+        help="Process one explicit PDF, TXT, DOCX, or EPUB source file.",
+    )
+    source_group.add_argument(
+        "--all",
+        dest="process_all",
+        action="store_true",
+        help="Process every supported source in the Books to Convert folder.",
+    )
+    parser.add_argument(
+        "--non-interactive",
+        "--yes",
+        dest="non_interactive",
+        action="store_true",
+        help="Run without prompts, using command-line choices, saved settings, and defaults.",
+    )
+    parser.add_argument("--title", help="Override the detected title. Only valid with --source.")
+    parser.add_argument("--author", help="Override the detected author for this run.")
+    parser.add_argument(
+        "--front-matter",
+        choices=["keep", "skip"],
+        help="In non-interactive mode, keep or skip all detected front matter.",
+    )
+    parser.add_argument(
+        "--output",
+        choices=["mp3", "m4b", "both"],
+        help="Override the saved output format for this run.",
+    )
+    parser.add_argument(
+        "--original",
+        choices=["keep", "archive", "trash"],
+        help="Choose what happens to successfully converted source files.",
+    )
+    parser.add_argument(
+        "--project-dir",
+        type=Path,
+        metavar="FOLDER",
+        help="Use this project folder for the current run.",
+    )
     parser.add_argument(
         "--force", action="store_true", help="Remake MP3 files even if they already exist."
     )
@@ -75,7 +120,37 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--version", action="store_true", help="Show the script version, then exit."
     )
-    return parser.parse_args()
+
+    args = parser.parse_args()
+
+    if args.title and args.source is None:
+        parser.error("--title requires --source.")
+
+    automation_choices = [
+        args.source,
+        args.process_all,
+        args.title,
+        args.author,
+        args.front_matter,
+        args.output,
+        args.original,
+        args.project_dir,
+    ]
+    if any(value is not None and value is not False for value in automation_choices):
+        args.non_interactive = True
+
+    return args
+
+
+def conversion_options_from_args(args: argparse.Namespace) -> ConversionOptions:
+    return ConversionOptions(
+        non_interactive=args.non_interactive,
+        source=args.source,
+        process_all=args.process_all,
+        title=args.title,
+        author=args.author,
+        front_matter=args.front_matter,
+    )
 
 
 def show_settings(settings: Settings, paths: ProjectPaths) -> None:

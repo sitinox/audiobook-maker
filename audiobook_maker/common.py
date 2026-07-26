@@ -182,6 +182,16 @@ class Settings:
     project_dir: Optional[Path] = None
 
 
+@dataclass(frozen=True)
+class ConversionOptions:
+    non_interactive: bool = False
+    source: Optional[Path] = None
+    process_all: bool = False
+    title: Optional[str] = None
+    author: Optional[str] = None
+    front_matter: Optional[str] = None
+
+
 @dataclass
 class Section:
     heading: str
