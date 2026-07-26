@@ -4,6 +4,7 @@ from typing import Optional
 
 from .common import DIVIDER_PATTERN, PAGE_NUMBER_PATTERN, URL_PATTERN
 
+
 def safe_filename(name: str, limit: int = 180) -> str:
     name = name.replace("’", "'").replace("“", '"').replace("”", '"')
     name = re.sub(r"\s*[:–—]\s*", " - ", name)
@@ -23,91 +24,52 @@ def pretty_title_from_filename(path: Path) -> str:
 def clean_heading_for_filename(heading):
 
     heading = re.sub(
-
         r"\s+",
-
         " ",
-
         heading,
-
     ).strip()
 
     heading = re.sub(
-
         r"\s*[:–—]\s*",
-
         " - ",
-
         heading,
-
     )
 
     heading = re.sub(
-
         r"\s*-\s*",
-
         " - ",
-
         heading,
-
     )
 
-    generic = (
-
-        "Stave|Chapter|Part|Book|"
-
-        "Letter|Section"
-
-    )
+    generic = "Stave|Chapter|Part|Book|Letter|Section"
 
     heading = re.sub(
-
         rf"^((?:{generic})\s+"
-
         rf"(?:[IVXLCDM]+|\d+|[A-Za-z]+))"
-
         rf"\s*-\s*(?:{generic})$",
-
         r"\1",
-
         heading,
-
         flags=re.I,
-
     )
 
     heading = re.sub(
-
         rf"^((?:{generic})\s+"
-
         rf"(?:[IVXLCDM]+|\d+|[A-Za-z]+))"
-
         rf"\s+(?:{generic})$",
-
         r"\1",
-
         heading,
-
         flags=re.I,
-
     )
 
     heading = re.sub(
-
         r"\s+",
-
         " ",
-
         heading,
-
     ).strip()
 
     return safe_filename(
-
         heading,
-
         120,
-
     )
 
 
@@ -144,7 +106,10 @@ def suggest_title_author(path: Path, text: str) -> tuple[str, Optional[str]]:
     for line in lines[:30]:
         if URL_PATTERN.search(line):
             continue
-        if re.match(r"(?i)^(summary|rating|relationships?|characters?|warnings?|fandom|category|language|published|updated|words|chapters|status)\b", line):
+        if re.match(
+            r"(?i)^(summary|rating|relationships?|characters?|warnings?|fandom|category|language|published|updated|words|chapters|status)\b",
+            line,
+        ):
             continue
         if re.match(r"(?i)^by\s+.+", line):
             continue
@@ -175,5 +140,3 @@ def preview_text(text: str, limit: int = 160) -> str:
     if len(preview) > limit:
         preview = preview[: limit - 3].rstrip() + "..."
     return preview
-
-

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 import audiobook_maker.audio as audio
@@ -32,7 +30,9 @@ def test_m4b_failure_preserves_existing_output(tmp_path, monkeypatch):
     monkeypatch.setattr(m4b, "get_audio_duration", lambda path: 1.0)
     monkeypatch.setattr(m4b, "_write_concat_file", lambda *args, **kwargs: None)
     monkeypatch.setattr(m4b, "_write_ffmetadata_file", lambda *args, **kwargs: None)
-    monkeypatch.setattr(m4b, "_build_combined_audio", lambda **kwargs: kwargs["output_path"].write_bytes(b"audio"))
+    monkeypatch.setattr(
+        m4b, "_build_combined_audio", lambda **kwargs: kwargs["output_path"].write_bytes(b"audio")
+    )
 
     def fail_final(**kwargs):
         kwargs["output_path"].write_bytes(b"partial-new-output")
@@ -60,8 +60,12 @@ def test_m4b_is_replaced_only_after_verification(tmp_path, monkeypatch):
     monkeypatch.setattr(m4b, "get_audio_duration", lambda path: 1.0)
     monkeypatch.setattr(m4b, "_write_concat_file", lambda *args, **kwargs: None)
     monkeypatch.setattr(m4b, "_write_ffmetadata_file", lambda *args, **kwargs: None)
-    monkeypatch.setattr(m4b, "_build_combined_audio", lambda **kwargs: kwargs["output_path"].write_bytes(b"audio"))
-    monkeypatch.setattr(m4b, "_build_final_m4b", lambda **kwargs: kwargs["output_path"].write_bytes(b"new-complete"))
+    monkeypatch.setattr(
+        m4b, "_build_combined_audio", lambda **kwargs: kwargs["output_path"].write_bytes(b"audio")
+    )
+    monkeypatch.setattr(
+        m4b, "_build_final_m4b", lambda **kwargs: kwargs["output_path"].write_bytes(b"new-complete")
+    )
 
     def verify(**kwargs):
         assert output.read_bytes() == b"old"
@@ -81,9 +85,7 @@ def test_m4b_is_replaced_only_after_verification(tmp_path, monkeypatch):
 
 
 def test_later_chapter_failure_leaves_previous_mp3_audiobook_unchanged(
-
     tmp_path,
-
 ):
 
     output = tmp_path / "Book"
@@ -99,31 +101,20 @@ def test_later_chapter_failure_leaves_previous_mp3_audiobook_unchanged(
     staging.mkdir()
 
     with pytest.raises(RuntimeError, match="chapter two failed"):
-
         (staging / "new-one.mp3").write_bytes(b"new-one")
 
         raise RuntimeError("chapter two failed")
 
-    assert {
-
-        item.name: item.read_bytes()
-
-        for item in output.iterdir()
-
-    } == {
-
+    assert {item.name: item.read_bytes() for item in output.iterdir()} == {
         "old-one.mp3": b"old-one",
-
         "old-two.mp3": b"old-two",
-
     }
 
     assert (staging / "new-one.mp3").read_bytes() == b"new-one"
 
+
 def test_successful_mp3_publication_replaces_complete_audiobook(
-
     tmp_path,
-
 ):
 
     output = tmp_path / "Book"
@@ -144,28 +135,17 @@ def test_successful_mp3_publication_replaces_complete_audiobook(
 
     pipeline._publish_mp3_directory(staging, output)
 
-    assert {
-
-        path.name: path.read_bytes()
-
-        for path in output.iterdir()
-
-    } == {
-
+    assert {path.name: path.read_bytes() for path in output.iterdir()} == {
         "new-one.mp3": b"new-one",
-
         "new-two.mp3": b"new-two",
-
     }
 
     assert not staging.exists()
 
+
 def test_mp3_publication_failure_restores_previous_audiobook(
-
     tmp_path,
-
     monkeypatch,
-
 ):
 
     output = tmp_path / "Book"
@@ -191,29 +171,20 @@ def test_mp3_publication_failure_restores_previous_audiobook(
         replace_calls += 1
 
         if replace_calls == 2:
-
             raise OSError("simulated publication failure")
 
         return real_replace(source, destination)
 
     monkeypatch.setattr(
-
         pipeline.os,
-
         "replace",
-
         fail_when_publishing,
-
     )
 
     with pytest.raises(
-
         OSError,
-
         match="simulated publication failure",
-
     ):
-
         pipeline._publish_mp3_directory(staging, output)
 
     assert (output / "old.mp3").read_bytes() == b"old"

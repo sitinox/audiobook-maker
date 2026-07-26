@@ -1,11 +1,10 @@
 import json
-from pathlib import Path
 
 import pytest
 
-from audiobook_maker.common import DEFAULT_RATE, ProjectPaths, Settings
 from audiobook_maker import settings as settings_module
 from audiobook_maker.cli import parse_args
+from audiobook_maker.common import DEFAULT_RATE, ProjectPaths, Settings
 
 
 def test_cli_rejects_rate_below_supported_range(monkeypatch):
@@ -29,7 +28,7 @@ def test_corrupt_settings_are_preserved(monkeypatch, tmp_path, capsys):
 
     assert loaded.rate == DEFAULT_RATE
     assert not settings_path.exists()
-    backups = list(tmp_path.glob("settings.json.corrupt-*") )
+    backups = list(tmp_path.glob("settings.json.corrupt-*"))
     assert len(backups) == 1
     assert backups[0].read_text(encoding="utf-8") == "{not valid json"
     assert "preserved" in capsys.readouterr().out
@@ -44,6 +43,7 @@ def test_settings_are_saved_as_valid_json(monkeypatch, tmp_path):
     data = json.loads(settings_path.read_text(encoding="utf-8"))
     assert data["rate"] == 300
     assert list(tmp_path.glob(".settings.json.*.tmp")) == []
+
 
 def test_saved_project_folder_is_loaded(monkeypatch, tmp_path):
     settings_path = tmp_path / "settings.json"
@@ -88,9 +88,7 @@ def test_project_paths_are_derived_from_selected_folder(tmp_path):
     assert paths.chapter_text_dir == project_dir / "Chapter Text Files"
     assert paths.extracted_text_dir == project_dir / "Extracted Full Text"
     assert paths.reports_dir == project_dir / "Reports"
-    assert paths.converted_originals_dir == (
-        project_dir / "Converted Originals"
-    )
+    assert paths.converted_originals_dir == (project_dir / "Converted Originals")
 
 
 def test_required_directories_stay_inside_selected_folder(tmp_path):
@@ -101,7 +99,6 @@ def test_required_directories_stay_inside_selected_folder(tmp_path):
         directory.mkdir(parents=True, exist_ok=True)
 
     assert all(
-        directory == project_dir
-        or project_dir in directory.parents
+        directory == project_dir or project_dir in directory.parents
         for directory in paths.required_directories()
     )

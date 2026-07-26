@@ -15,6 +15,7 @@ if not (PACKAGE_PARENT / "audiobook_maker").is_dir():
 
 sys.path.insert(0, str(PACKAGE_PARENT))
 
+
 def find_extractor() -> Callable[..., Any]:
     for module_name in (
         "audiobook_maker.extractors",
@@ -31,7 +32,9 @@ def find_extractor() -> Callable[..., Any]:
             return fn
     raise SystemExit("FAIL: Could not import extract_source_text from Audiobook Maker.")
 
+
 extract_source_text = find_extractor()
+
 
 def extract(path: Path, title: str) -> Any:
     last_error: Optional[Exception] = None
@@ -45,6 +48,7 @@ def extract(path: Path, title: str) -> Any:
         except TypeError as exc:
             last_error = exc
     raise RuntimeError(f"Could not call extract_source_text: {last_error}")
+
 
 def cover_bytes(result: Any) -> Optional[bytes]:
     for name in ("cover_art", "cover"):
@@ -68,6 +72,7 @@ def cover_bytes(result: Any) -> Optional[bytes]:
                 return p.read_bytes()
     return None
 
+
 def detail(result: Any) -> str:
     for name in (
         "cover_detail",
@@ -84,8 +89,10 @@ def detail(result: Any) -> str:
     has_cover = cover_bytes(result) is not None
     return f"source_type={source_type}; cover_present={has_cover}".lower()
 
+
 def image_ok(data: Optional[bytes]) -> bool:
     return bool(data and len(data) > 100)
+
 
 def make_cover(path: Path) -> None:
     import base64
@@ -102,6 +109,7 @@ def make_cover(path: Path) -> None:
         "9oACAEBAAE/EF//2Q=="
     )
     path.write_bytes(base64.b64decode(jpeg_b64))
+
 
 def make_pdf(source_txt: Path, pdf_path: Path) -> None:
     try:
@@ -120,6 +128,7 @@ def make_pdf(source_txt: Path, pdf_path: Path) -> None:
             "FAIL: Could not create the disposable PDF: "
             + result.stderr.decode("utf-8", errors="ignore")
         )
+
 
 with tempfile.TemporaryDirectory(prefix="audiobook_cover_tests_") as temp_name:
     root = Path(temp_name)

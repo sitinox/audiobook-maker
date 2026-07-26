@@ -1,9 +1,7 @@
-
-from pathlib import Path
-
 from types import SimpleNamespace
 
 import audiobook_maker.files as files
+
 
 def test_keep_leaves_original_in_place(tmp_path):
 
@@ -21,6 +19,7 @@ def test_keep_leaves_original_in_place(tmp_path):
 
     assert result == "Original kept in Books to Convert."
 
+
 def test_archive_moves_original(tmp_path, monkeypatch):
 
     source = tmp_path / "Book.txt"
@@ -30,13 +29,9 @@ def test_archive_moves_original(tmp_path, monkeypatch):
     archive = tmp_path / "Converted Originals"
 
     result = files.handle_successful_original(
-
         source,
-
         "archive",
-
         archive,
-
     )
 
     assert not source.exists()
@@ -44,6 +39,7 @@ def test_archive_moves_original(tmp_path, monkeypatch):
     assert (archive / "Book.txt").exists()
 
     assert result == "Original moved to Converted Originals as: Book.txt"
+
 
 def test_archive_uses_unique_name(tmp_path, monkeypatch):
 
@@ -58,13 +54,9 @@ def test_archive_uses_unique_name(tmp_path, monkeypatch):
     (archive / "Book.txt").write_text("existing", encoding="utf-8")
 
     result = files.handle_successful_original(
-
         source,
-
         "archive",
-
         archive,
-
     )
 
     assert not source.exists()
@@ -74,6 +66,7 @@ def test_archive_uses_unique_name(tmp_path, monkeypatch):
     assert (archive / "Book (2).txt").read_text(encoding="utf-8") == "new"
 
     assert result == "Original moved to Converted Originals as: Book (2).txt"
+
 
 def test_trash_reports_success_when_original_disappears(tmp_path, monkeypatch):
 
@@ -98,4 +91,3 @@ def test_trash_reports_success_when_original_disappears(tmp_path, monkeypatch):
     assert not source.exists()
 
     assert result == "Original moved to the Bin."
-

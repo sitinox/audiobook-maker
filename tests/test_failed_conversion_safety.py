@@ -1,12 +1,11 @@
-
 from types import SimpleNamespace
 
 import pytest
 
 import audiobook_maker.cli as cli
-
 from audiobook_maker.common import Settings
 from audiobook_maker.pipeline import ConversionOutcome
+
 
 def test_failed_conversion_does_not_handle_original(tmp_path, monkeypatch):
 
@@ -19,31 +18,19 @@ def test_failed_conversion_does_not_handle_original(tmp_path, monkeypatch):
     source.write_text("Disposable test source.", encoding="utf-8")
 
     args = SimpleNamespace(
-
         force=False,
-
         voice=None,
-
         rate=None,
-
         bitrate=None,
-
         settings=False,
-
         changelog=False,
-
         version=False,
-
     )
 
     settings = Settings(
-
         output_format="mp3",
-
         original_action="archive",
-
         project_dir=tmp_path,
-
     )
 
     handled = []
@@ -63,41 +50,23 @@ def test_failed_conversion_does_not_handle_original(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "find_supported_sources", lambda source_dir: [source])
 
     monkeypatch.setattr(
-
         cli,
-
         "choose_run_original_action",
-
         lambda default: "archive",
-
     )
 
     monkeypatch.setattr(
-
         cli,
-
         "process_source",
-
         lambda *args, **kwargs: (_ for _ in ()).throw(
-
             RuntimeError("Disposable conversion failure")
-
         ),
-
     )
 
     monkeypatch.setattr(
-
         cli,
-
         "handle_successful_original",
-
-        lambda path, action, converted_dir: handled.append(
-
-            (path, action)
-
-        ),
-
+        lambda path, action, converted_dir: handled.append((path, action)),
     )
 
     monkeypatch.setattr(cli, "notify_run_complete", lambda *args: None)
@@ -117,17 +86,11 @@ def test_failed_conversion_does_not_handle_original(tmp_path, monkeypatch):
     assert handled == []
 
 
-
 @pytest.mark.parametrize("original_action", ["keep", "archive", "trash"])
-
 def test_cancelled_conversion_does_not_handle_original(
-
     original_action,
-
     tmp_path,
-
     monkeypatch,
-
 ):
 
     source_dir = tmp_path / "Books to Convert"
@@ -139,31 +102,19 @@ def test_cancelled_conversion_does_not_handle_original(
     source.write_text("Disposable test source.", encoding="utf-8")
 
     args = SimpleNamespace(
-
         force=False,
-
         voice=None,
-
         rate=None,
-
         bitrate=None,
-
         settings=False,
-
         changelog=False,
-
         version=False,
-
     )
 
     settings = Settings(
-
         output_format="mp3",
-
         original_action=original_action,
-
         project_dir=tmp_path,
-
     )
 
     handled = []
@@ -185,37 +136,21 @@ def test_cancelled_conversion_does_not_handle_original(
     monkeypatch.setattr(cli, "find_supported_sources", lambda source_dir: [source])
 
     monkeypatch.setattr(
-
         cli,
-
         "choose_run_original_action",
-
         lambda default: original_action,
-
     )
 
     monkeypatch.setattr(
-
         cli,
-
         "process_source",
-
         lambda *args, **kwargs: ConversionOutcome.CANCELLED,
-
     )
 
     monkeypatch.setattr(
-
         cli,
-
         "handle_successful_original",
-
-        lambda path, action, converted_dir: handled.append(
-
-            (path, action)
-
-        ),
-
+        lambda path, action, converted_dir: handled.append((path, action)),
     )
 
     monkeypatch.setattr(cli, "notify_run_complete", lambda *args: None)
@@ -237,4 +172,3 @@ def test_cancelled_conversion_does_not_handle_original(
     assert "Books completed: 0" in messages
 
     assert "Books failed: 0" in messages
-
