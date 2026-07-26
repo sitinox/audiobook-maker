@@ -1,5 +1,7 @@
 # Audiobook Maker
 
+[![CI](https://github.com/sitinox/audiobook-maker/actions/workflows/ci.yml/badge.svg)](https://github.com/sitinox/audiobook-maker/actions/workflows/ci.yml)
+
 Audiobook Maker is an accessible macOS command-line tool that converts DRM-free PDF, TXT, DOCX, and EPUB books into chapterised MP3 audiobooks, single-file M4B audiobooks, or both.
 
 It is designed for keyboard and VoiceOver use.
