@@ -6,7 +6,7 @@ from audiobook_maker.common import VERSION
 
 def test_version_is_v1():
 
-    assert VERSION == "v1.0.0"
+    assert VERSION == "v1.1.0"
 
 
 def test_version_command(monkeypatch, capsys):
@@ -19,7 +19,7 @@ def test_version_command(monkeypatch, capsys):
 
     assert result == 0
 
-    assert "v1.0.0" in output
+    assert "v1.1.0" in output
 
 
 def test_packaged_changelog_matches_repository_changelog():

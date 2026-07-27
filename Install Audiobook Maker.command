@@ -2,7 +2,7 @@
 set -u
 
 APP_NAME="Audiobook Maker"
-VERSION="v1.0.0"
+VERSION="v1.1.0"
 REPOSITORY="https://github.com/sitinox/audiobook-maker"
 DEFAULT_SUPPORT_DIR="$HOME/Library/Application Support/Audiobook Maker"
 SUPPORT_DIR="${AUDIOBOOK_MAKER_SUPPORT_DIR:-$DEFAULT_SUPPORT_DIR}"

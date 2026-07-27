@@ -4,6 +4,28 @@ All notable changes to Audiobook Maker are documented in this file.
 
 The project uses semantic versioning for public releases.
 
+## [1.1.0] - 2026-07-27
+
+### Faster track conversion
+
+- Processes independent audiobook tracks concurrently, substantially reducing conversion time for books with multiple chapters.
+- Uses the available CPU cores by default without creating more workers than there are tracks.
+- Adds `--jobs N` to control the maximum number of concurrent tracks.
+- Supports `--jobs 1` for the previous serial conversion behaviour.
+- Starts longer tracks first while preserving the correct final chapter order.
+
+### Speech synthesis
+
+- Uses the native macOS speech API for concurrent speech-file generation.
+- Falls back to the built-in macOS `say` command when the native speech API or selected voice is unavailable.
+- Records the speech engine, MP3 encoding engine, and worker count in conversion reports.
+
+### Documentation and testing
+
+- Documents parallel conversion, native macOS speech synthesis, and the `--jobs` option.
+- Adds regression tests for concurrent processing, serial fallback, worker limits, chapter ordering, native voice lookup, and `say` fallback.
+- Expands the non-interactive end-to-end tests to cover worker selection.
+
 ## [1.0.0] - 2026-07-26
 
 ### Initial public release

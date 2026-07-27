@@ -26,7 +26,7 @@ def test_installer_and_uninstaller_are_executable():
 def test_installer_declares_release_version():
     contents = INSTALLER.read_text(encoding="utf-8")
 
-    assert 'VERSION="v1.0.0"' in contents
+    assert 'VERSION="v1.1.0"' in contents
     assert "refs/tags/$VERSION.zip" in contents
 
 
