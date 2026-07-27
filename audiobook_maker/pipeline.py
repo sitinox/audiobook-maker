@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,7 @@ from .audio import (
     estimate_duration_seconds,
     format_duration,
     get_audio_duration,
+    prepare_speech_voice,
     tag_mp3,
 )
 from .chapters import (
@@ -162,6 +164,25 @@ class OutputPlan:
 class ConversionResult:
     actual_seconds: float
     m4b_result: Any
+
+
+@dataclass(frozen=True)
+class PreparedTrack:
+    display_number: str
+    track_number: int
+    base_heading: str
+    text_file: Path
+    mp3_file: Path
+    existing_mp3_file: Optional[Path]
+    spoken_text: str
+    word_total: int
+
+
+@dataclass(frozen=True)
+class TrackConversionResult:
+    chapter: M4BChapter
+    duration: float
+    report_lines: tuple[str, ...]
 
 
 def _analyse_extracted_book(
@@ -451,19 +472,16 @@ def _track_output_details(
     )
 
 
-def _convert_track(
+def _prepare_track(
     *,
     index: int,
     tracks: list[Any],
     book: PreparedBook,
     output_plan: OutputPlan,
-    settings: Settings,
-    force: bool,
     temp_dir: Path,
     mp3_staging_dir: Optional[Path],
     used_names: set[str],
-    report: list[str],
-) -> tuple[M4BChapter, float]:
+) -> PreparedTrack:
     section = tracks[index - 1]
     display_number, track_number, base_heading = _track_output_details(
         index,
@@ -494,51 +512,152 @@ def _convert_track(
     )
     text_file.write_text(spoken_text, encoding="utf-8")
 
-    can_skip_existing = existing_mp3_file is not None and existing_mp3_file.exists() and not force
+    return PreparedTrack(
+        display_number=display_number,
+        track_number=track_number,
+        base_heading=base_heading,
+        text_file=text_file,
+        mp3_file=mp3_file,
+        existing_mp3_file=existing_mp3_file,
+        spoken_text=spoken_text,
+        word_total=word_count(spoken_text),
+    )
+
+
+def _convert_prepared_track(
+    track: PreparedTrack,
+    *,
+    book: PreparedBook,
+    settings: Settings,
+    force: bool,
+    temp_dir: Path,
+    total_tracks: int,
+) -> TrackConversionResult:
+    can_skip_existing = (
+        track.existing_mp3_file is not None and track.existing_mp3_file.exists() and not force
+    )
+    report_lines: list[str] = []
 
     if can_skip_existing:
         say(
-            f"Skipping {display_number} of "
-            f"{str(len(tracks)).zfill(3)}: "
-            f"{base_heading} — already exists."
+            f"Skipping {track.display_number} of "
+            f"{str(total_tracks).zfill(3)}: "
+            f"{track.base_heading} — already exists."
         )
-        shutil.copy2(existing_mp3_file, mp3_file)
-        report.append(f"Skipped existing: {mp3_file.name}")
+        shutil.copy2(track.existing_mp3_file, track.mp3_file)
+        report_lines.append(f"Skipped existing: {track.mp3_file.name}")
     else:
         say(
-            f"Creating {display_number} of "
-            f"{str(len(tracks)).zfill(3)}: "
-            f"{base_heading} — "
-            f"{word_count(spoken_text)} words."
+            f"Creating {track.display_number} of "
+            f"{str(total_tracks).zfill(3)}: "
+            f"{track.base_heading} — "
+            f"{track.word_total} words."
         )
         create_audio_from_text(
-            text_file,
-            mp3_file,
+            track.text_file,
+            track.mp3_file,
             temp_dir,
             settings,
+            track.spoken_text,
         )
 
-        if output_plan.mp3_output_dir is not None:
-            report.append(f"Created: {mp3_file.name}")
+        if track.existing_mp3_file is not None:
+            report_lines.append(f"Created: {track.mp3_file.name}")
 
-    if output_plan.mp3_output_dir is not None:
+    if track.existing_mp3_file is not None:
         tag_mp3(
-            mp3_file,
+            track.mp3_file,
             book.title,
             book.author,
-            base_heading,
-            track_number,
-            len(tracks),
+            track.base_heading,
+            track.track_number,
+            total_tracks,
             settings,
             book.extracted.cover_art,
         )
 
-    duration = get_audio_duration(mp3_file)
+    duration = get_audio_duration(track.mp3_file)
 
-    if output_plan.mp3_output_dir is not None:
-        report.append(f"Tagged: {mp3_file.name} — {format_duration(duration)}")
+    if track.existing_mp3_file is not None:
+        report_lines.append(f"Tagged: {track.mp3_file.name} — {format_duration(duration)}")
 
-    return M4BChapter(title=base_heading, audio_path=mp3_file), duration
+    return TrackConversionResult(
+        chapter=M4BChapter(
+            title=track.base_heading,
+            audio_path=track.mp3_file,
+        ),
+        duration=duration,
+        report_lines=tuple(report_lines),
+    )
+
+
+def _conversion_worker_count(requested_jobs: Optional[int], track_count: int) -> int:
+    if track_count < 1:
+        return 1
+    if requested_jobs is not None and requested_jobs < 1:
+        raise ValueError("Worker count must be at least 1.")
+    available = requested_jobs if requested_jobs is not None else (os.cpu_count() or 1)
+    return min(available, track_count)
+
+
+def _convert_tracks(
+    tracks: list[PreparedTrack],
+    *,
+    book: PreparedBook,
+    settings: Settings,
+    force: bool,
+    temp_dir: Path,
+    jobs: Optional[int],
+) -> list[TrackConversionResult]:
+    worker_count = _conversion_worker_count(jobs, len(tracks))
+    worker_label = "worker" if worker_count == 1 else "workers"
+    say(f"Processing tracks with {worker_count} {worker_label}.")
+    prepare_speech_voice(settings.voice)
+
+    if worker_count == 1:
+        return [
+            _convert_prepared_track(
+                track,
+                book=book,
+                settings=settings,
+                force=force,
+                temp_dir=temp_dir,
+                total_tracks=len(tracks),
+            )
+            for track in tracks
+        ]
+
+    indexed_tracks = sorted(
+        enumerate(tracks),
+        key=lambda item: (-item[1].word_total, item[0]),
+    )
+
+    with ThreadPoolExecutor(
+        max_workers=worker_count,
+        thread_name_prefix="audiobook-track",
+    ) as executor:
+        futures = {
+            executor.submit(
+                _convert_prepared_track,
+                track,
+                book=book,
+                settings=settings,
+                force=force,
+                temp_dir=temp_dir,
+                total_tracks=len(tracks),
+            ): index
+            for index, track in indexed_tracks
+        }
+        results: dict[int, TrackConversionResult] = {}
+        try:
+            for future in as_completed(futures):
+                results[futures[future]] = future.result()
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
+
+    return [results[index] for index in range(len(tracks))]
 
 
 def _create_m4b_output(
@@ -595,6 +714,7 @@ def _run_conversion(
     settings: Settings,
     force: bool,
     report: list[str],
+    jobs: Optional[int] = None,
 ) -> ConversionResult:
     actual_seconds = 0.0
     used_names: set[str] = set()
@@ -614,23 +734,39 @@ def _run_conversion(
     ):
         temp_dir = Path(temp)
         mp3_staging_dir = Path(mp3_staging) if mp3_staging is not None else None
-        m4b_chapters: list[M4BChapter] = []
-
-        for index in range(1, len(track_plan.tracks) + 1):
-            chapter, duration = _convert_track(
+        prepared_tracks = [
+            _prepare_track(
                 index=index,
                 tracks=track_plan.tracks,
                 book=book,
                 output_plan=output_plan,
-                settings=settings,
-                force=force,
                 temp_dir=temp_dir,
                 mp3_staging_dir=mp3_staging_dir,
                 used_names=used_names,
-                report=report,
             )
-            m4b_chapters.append(chapter)
-            actual_seconds += duration
+            for index in range(1, len(track_plan.tracks) + 1)
+        ]
+        native_speech_api = prepare_speech_voice(settings.voice)
+        worker_count = _conversion_worker_count(jobs, len(prepared_tracks))
+        report.append(
+            "Speech synthesis engine: "
+            + ("native macOS API" if native_speech_api else "say command")
+        )
+        report.append("MP3 encoding engine: FFmpeg command")
+        report.append(f"Track processing workers: {worker_count}")
+        results = _convert_tracks(
+            prepared_tracks,
+            book=book,
+            settings=settings,
+            force=force,
+            temp_dir=temp_dir,
+            jobs=jobs,
+        )
+        m4b_chapters = [result.chapter for result in results]
+
+        for result in results:
+            actual_seconds += result.duration
+            report.extend(result.report_lines)
 
         m4b_result = _create_m4b_output(
             book=book,
@@ -718,6 +854,7 @@ def process_source(
         settings=settings,
         force=force,
         report=report,
+        jobs=options.jobs,
     )
     _finish_conversion(
         book=book,

@@ -1,7 +1,16 @@
 import subprocess
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+
+try:
+    from AppKit import NSSpeechSynthesizer
+    from Foundation import NSURL, NSDate, NSRunLoop
+    from objc import autorelease_pool
+except ImportError:
+    NSSpeechSynthesizer = NSDate = NSRunLoop = NSURL = None
+    autorelease_pool = None
 
 try:
     from mutagen.id3 import APIC, COMM, ID3, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TRCK
@@ -13,6 +22,76 @@ except ImportError:
     MP3 = None
 
 from .common import SAMPLE_RATE, Settings, run_command
+
+
+@lru_cache(maxsize=None)
+def _speech_voice_identifier(voice_name: str) -> Optional[str]:
+    if NSSpeechSynthesizer is None:
+        return None
+
+    for identifier in NSSpeechSynthesizer.availableVoices():
+        attributes = NSSpeechSynthesizer.attributesForVoice_(identifier)
+        if str(attributes.get("VoiceName", "")) == voice_name:
+            return str(identifier)
+
+    return None
+
+
+def prepare_speech_voice(voice_name: str) -> bool:
+    return _speech_voice_identifier(voice_name) is not None
+
+
+def _create_speech_audio(
+    text_file: Path,
+    aiff_file: Path,
+    settings: Settings,
+    text: Optional[str] = None,
+) -> None:
+    identifier = _speech_voice_identifier(settings.voice)
+
+    if (
+        identifier is None
+        or NSSpeechSynthesizer is None
+        or NSDate is None
+        or NSRunLoop is None
+        or NSURL is None
+        or autorelease_pool is None
+    ):
+        run_command(
+            [
+                "say",
+                "-v",
+                settings.voice,
+                "-r",
+                str(settings.rate),
+                "-o",
+                str(aiff_file),
+                "-f",
+                str(text_file),
+            ],
+            f"Creating speech audio: {aiff_file.name}",
+        )
+        return
+
+    with autorelease_pool():
+        synthesizer = NSSpeechSynthesizer.alloc().initWithVoice_(identifier)
+        if synthesizer is None:
+            raise RuntimeError(f'Could not initialise the speech voice "{settings.voice}".')
+
+        synthesizer.setRate_(float(settings.rate))
+        accepted = synthesizer.startSpeakingString_toURL_(
+            text if text is not None else text_file.read_text(encoding="utf-8"),
+            NSURL.fileURLWithPath_(str(aiff_file)),
+        )
+        if not accepted:
+            raise RuntimeError(f"Speech synthesis could not start for {aiff_file.name}.")
+
+        run_loop = NSRunLoop.currentRunLoop()
+        while synthesizer.isSpeaking():
+            run_loop.runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.01))
+
+    if not aiff_file.exists() or aiff_file.stat().st_size == 0:
+        raise RuntimeError(f"Speech synthesis did not create {aiff_file.name}.")
 
 
 def format_duration(seconds: float) -> str:
@@ -74,23 +153,23 @@ def get_audio_duration(mp3_path: Path) -> float:
 
 
 def create_audio_from_text(
-    text_file: Path, mp3_file: Path, temp_dir: Path, settings: Settings
+    text_file: Path,
+    mp3_file: Path,
+    temp_dir: Path,
+    settings: Settings,
+    text: Optional[str] = None,
 ) -> None:
     aiff_file = temp_dir / (mp3_file.stem + ".aiff")
-    run_command(
-        [
-            "say",
-            "-v",
-            settings.voice,
-            "-r",
-            str(settings.rate),
-            "-o",
-            str(aiff_file),
-            "-f",
-            str(text_file),
-        ],
-        f"Creating speech audio: {mp3_file.name}",
-    )
+    _create_speech_audio(text_file, aiff_file, settings, text)
+    _encode_mp3_with_ffmpeg(aiff_file, mp3_file, settings)
+    aiff_file.unlink(missing_ok=True)
+
+
+def _encode_mp3_with_ffmpeg(
+    aiff_file: Path,
+    mp3_file: Path,
+    settings: Settings,
+) -> None:
     run_command(
         [
             "ffmpeg",
