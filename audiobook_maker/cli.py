@@ -46,6 +46,16 @@ def speech_rate(value: str) -> int:
     return rate
 
 
+def job_count(value: str) -> int:
+    try:
+        jobs = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("Worker count must be a whole number.") from error
+    if jobs < 1:
+        raise argparse.ArgumentTypeError("Worker count must be at least 1.")
+    return jobs
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=f"Audiobook Maker {VERSION}. Convert PDF, TXT, DOCX, and EPUB sources into chapterised MP3, M4B, or combined audiobooks.",
@@ -111,6 +121,15 @@ def parse_args() -> argparse.Namespace:
         help="Override the saved MP3 bitrate for this run and save it.",
     )
     parser.add_argument(
+        "--jobs",
+        type=job_count,
+        metavar="N",
+        help=(
+            "Process up to N tracks concurrently. "
+            "Defaults to the number of CPU cores; use 1 for serial processing."
+        ),
+    )
+    parser.add_argument(
         "--settings",
         action="store_true",
         help="Show current settings and project folders, then exit.",
@@ -151,6 +170,7 @@ def conversion_options_from_args(args: argparse.Namespace) -> ConversionOptions:
         title=getattr(args, "title", None),
         author=getattr(args, "author", None),
         front_matter=getattr(args, "front_matter", None),
+        jobs=getattr(args, "jobs", None),
     )
 
 

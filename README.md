@@ -17,6 +17,8 @@ It is designed for keyboard and VoiceOver use.
 - Embeds chapters, title, author, narrator, cover art, and other metadata.
 - Reviews front matter and suggests titles and authors before conversion.
 - Supports fully non-interactive conversion for scripts and repeatable workflows.
+- Processes independent tracks concurrently, using the machine's CPU cores by default.
+- Uses the native macOS speech API directly, with the `say` command as a fallback.
 - Uses EPUB artwork, companion images, PDF first-page artwork, or suitable DOCX images when available.
 - Estimates audiobook duration and verifies completed audio.
 - Produces a conversion report for each book.
@@ -37,7 +39,8 @@ It requires:
 - Poppler, including `pdftotext`;
 - the Python packages declared in `pyproject.toml`.
 
-Speech and desktop notifications use the built-in macOS `say` and `osascript` commands.
+Speech synthesis uses the native macOS speech API and falls back to the built-in
+`say` command when needed. Desktop notifications use `say` and `osascript`.
 
 ## Installation
 
@@ -126,6 +129,7 @@ Available overrides include:
 - `--original keep|archive|trash`;
 - `--project-dir`;
 - `--voice`, `--rate`, and `--bitrate`;
+- `--jobs N` to limit concurrent track processing (`--jobs 1` disables parallelism);
 - `--force`.
 
 In non-interactive mode, Audiobook Maker uses command-line values first, then saved settings and detected metadata. It fails clearly instead of falling back to a prompt when required configuration is missing.

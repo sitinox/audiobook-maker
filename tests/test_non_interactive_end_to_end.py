@@ -30,6 +30,7 @@ def test_main_non_interactive_never_prompts(tmp_path, monkeypatch):
         voice="Daniel",
         rate=300,
         bitrate=192,
+        jobs=3,
         settings=False,
         changelog=False,
         version=False,
@@ -110,6 +111,7 @@ def test_main_non_interactive_never_prompts(tmp_path, monkeypatch):
         title="Example Book",
         author="Example Author",
         front_matter="skip",
+        jobs=3,
     )
     assert handled == [
         (

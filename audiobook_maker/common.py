@@ -190,6 +190,7 @@ class ConversionOptions:
     title: Optional[str] = None
     author: Optional[str] = None
     front_matter: Optional[str] = None
+    jobs: Optional[int] = None
 
 
 @dataclass
